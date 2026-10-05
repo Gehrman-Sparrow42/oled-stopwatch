@@ -1,57 +1,49 @@
-# CHRONO OLED - High-Precision Browser Stopwatch
+# CHRONO FOCUS - OLED Study & Productivity Timer
 
-A specialized, true OLED-black (`#000000`) digital stopwatch engineered for power efficiency, zero eye strain, and millisecond accuracy. Built with a continuous background ticker and persistent memory.
+A standalone, true OLED-black (`#000000`) timer engineered specifically for deep work, study sessions, and focus intervals. Built with zero-drift background tracking, study block logging, and persistent session memory.
 
 ---
 
-## Key Features
+## Study-Centric Features
 
-- **True Pitch Black OLED Theme**: Pure `#000000` background ensures individual pixel shutdown on OLED and AMOLED screens.
-- **Continuous Background Operation (Tab Minimization Proof)**:
-  - **Zero-drift arithmetic**: Calculates elapsed time using wall-clock delta offsets (`Date.now()`), eliminating drift caused by browser throttling or OS sleep.
-  - **Dedicated Web Worker**: Keeps high-frequency clock pulses alive even when the browser tab is minimized or switched to the background.
-  - **Live Tab Title**: Displays live ticking time directly on the browser tab title (e.g. `⏱ 01:24.32 - CHRONO OLED`).
-  - **Auto-Sync Visibility API**: Seamlessly recalculates and resumes smooth animation frames when re-entering the tab.
-- **Lap & Split Delta Analytics**:
-  - Live split time, total elapsed time, and timestamp for each recorded lap.
-  - Automatic identification of **▲ Best Lap** (green highlight) and **▼ Slowest Lap** (red highlight) with delta comparisons.
-  - Live summary card: Fastest Lap, Slowest Lap, Average Lap, and Total Laps.
-  - Quick export: Copy formatted laps to clipboard or download as CSV file.
-- **Persistent Session Memory**:
-  - **Auto-Persistence**: Active state is saved continuously in `localStorage`. If you accidentally close the tab or reload, the stopwatch resumes exactly where you left off.
-  - **Archived Runs Drawer**: Save completed sessions to permanent history with timestamp, total duration, lap count, and best lap.
-  - **Backup & Restore**: Export history to JSON or restore previous laps onto the main board.
-- **Audio Synthesizer (Web Audio API)**:
-  - Toggleable subtle mechanical click feedback on Start, Stop, Lap, and Reset without external audio file dependencies.
-- **OLED Color Customization**:
-  - Matrix Emerald (`#00ff88`)
-  - Cyber Cyan (`#00f3ff`)
-  - Solar Amber (`#ffaa00`)
-  - Pure Ghost White (`#ffffff`)
-  - Crimson Red (`#ff3344`)
-  - Neon Violet (`#bd00ff`)
-- **Configurable Precision**:
-  - Toggle between `.00s` (1/100th second) and `.000s` (1/1000th millisecond).
+- **True Pitch Black OLED Design**: Pure `#000000` background ensures zero eye strain during late-night study sessions and saves power on OLED/AMOLED screens.
+- **Continuous Background Operation (Tab Minimization & Sleep Proof)**:
+  - **Zero-drift arithmetic**: Calculates elapsed time using monotonic wall-clock delta offsets (`Date.now()`), so time never freezes or drifts when the tab is backgrounded or your laptop sleeps.
+  - **Dedicated Web Worker**: Runs a background clock thread so title notifications and intervals keep ticking without main-thread browser throttling.
+  - **Live Tab Study Clock**: Displays active study time directly on your browser tab (e.g. `⏱ 45:12.00 - CHRONO FOCUS`), letting you keep track of your study session while reading in other tabs.
+- **Study Block & Interval Tracking**:
+  - Log study blocks (chapters, topics, Pomodoro intervals, problem sets) with split durations and cumulative study time.
+  - Live session metrics:
+    - **Total Study Time**: Overall time spent studying in the active session.
+    - **Active Block**: Live timer for your current study block.
+    - **Average Block**: Average duration of your study blocks.
+    - **Blocks Logged**: Total study intervals completed.
+- **Persistent Study Memory & Daily Log**:
+  - Automatically preserves active study sessions across page refreshes and browser restarts.
+  - Ending a study session archives it to the **Study Log & History Drawer** with date, time, total focus time, and completed blocks.
+  - Quick export options: Copy formatted study log to clipboard, download CSV, or backup all study history as JSON.
+- **OLED Ambient Color Themes**:
+  - Matrix Emerald, Cyber Cyan, Solar Amber, Pure Ghost White, Crimson Red, and Neon Violet.
+- **Subtle Audio Cues**:
+  - Toggleable soft audio chimes on Study Start, Break/Pause, Next Block, and Session End.
 
 ---
 
 ## Keyboard Shortcuts
 
-| Key | Action |
-|-----|--------|
-| **Space** | Start / Pause |
-| **L** | Record Lap / Split |
-| **R** | Reset Stopwatch (with auto-archive safeguard) |
-| **M** or **H** | Open / Close Memory & Archived Runs Drawer |
-| **S** | Toggle Audio Click Tones |
-| **F** | Toggle Fullscreen OLED Mode |
-| **2** / **3** | Switch Precision between 2 and 3 decimal places |
-| **Esc** | Close Modals |
+| Shortcut | Action |
+| :--- | :--- |
+| <kbd>Space</kbd> | Start Study / Take Break |
+| <kbd>L</kbd> or <kbd>B</kbd> | Log Next Study Block / Topic Split |
+| <kbd>R</kbd> | End Session (Auto-Archives to Study Log) |
+| <kbd>M</kbd> or <kbd>H</kbd> | Open / Close Study History Drawer |
+| <kbd>S</kbd> | Toggle Audio Cues |
+| <kbd>F</kbd> | Toggle Fullscreen OLED Focus Mode |
+| <kbd>2</kbd> / <kbd>3</kbd> | Switch Precision between 2 and 3 decimal places |
 
 ---
 
-## Quick Launch
+## How to Use
 
-- **Via Launcher**: Run [Launch_OLED_Stopwatch.bat](file:///c:/Tools/LAUNCHERS/Launch_OLED_Stopwatch.bat) in `C:\Tools\LAUNCHERS\`.
-- **Via Direct File**: Double click [index.html](file:///c:/Tools/oled-stopwatch/index.html) to open in your default browser.
-- **Via Local Server**: Run [start.bat](file:///c:/Tools/oled-stopwatch/start.bat) to launch `server.py` at `http://127.0.0.1:8110`.
+- **Standalone File**: Double-click [index.html](file:///c:/Tools/oled-stopwatch/index.html) in any web browser. Completely offline, zero install.
+- **Launcher**: Run [Launch_OLED_Stopwatch.bat](file:///c:/Tools/LAUNCHERS/Launch_OLED_Stopwatch.bat) from `C:\Tools\LAUNCHERS\`.

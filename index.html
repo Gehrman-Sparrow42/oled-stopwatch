@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CHRONO OLED - High-Precision Stopwatch</title>
-  <meta name="description" content="Self-contained true OLED black stopwatch with zero-drift background worker, lap delta analytics, and persistent memory.">
+  <title>CHRONO OLED - Study & Focus Timer</title>
+  <meta name="description" content="Self-contained true OLED black study timer with zero-drift background worker, study block tracking, and persistent session memory.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='44' fill='%23000' stroke='%2300ff88' stroke-width='8'/><line x1='50' y1='50' x2='50' y2='25' stroke='%2300ff88' stroke-width='7' stroke-linecap='round'/><line x1='50' y1='50' x2='70' y2='50' stroke='%2300ff88' stroke-width='5' stroke-linecap='round'/></svg>">
   <style>
 /* ==========================================================================
-   CHRONO OLED - Standalone Self-Contained Stylesheet
-   True Pure Black (#000000) for OLED / AMOLED Panels
+   CHRONO OLED - Standalone Study & Focus Timer
+   True Pure Black (#000000) for OLED / AMOLED Eyestrain-Free Studying
    ========================================================================== */
 
 :root {
@@ -32,10 +32,6 @@
   --text-main: #f0f0f0;
   --text-muted: #808080;
   --text-dim: #444444;
-
-  --color-fastest: #00ff88;
-  --color-slowest: #ff3b30;
-  --color-average: #ffaa00;
 
   --font-mono: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', Consolas, Monaco, monospace;
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
@@ -141,8 +137,8 @@ body {
 
 .brand-title {
   font-family: var(--font-mono);
-  font-size: 1.1rem;
-  letter-spacing: 0.18em;
+  font-size: 1.05rem;
+  letter-spacing: 0.16em;
   font-weight: 700;
   text-transform: uppercase;
   color: var(--text-main);
@@ -411,7 +407,7 @@ body {
   border: 1px solid var(--border-subtle);
   color: var(--text-main);
   font-family: var(--font-mono);
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -456,21 +452,21 @@ body {
 }
 
 .running .btn-primary-toggle {
-  background: rgba(255, 51, 68, 0.12);
-  border-color: rgba(255, 51, 68, 0.35);
-  color: #ff3344;
-  box-shadow: 0 0 16px rgba(255, 51, 68, 0.2);
+  background: rgba(255, 170, 0, 0.12);
+  border-color: rgba(255, 170, 0, 0.35);
+  color: #ffaa00;
+  box-shadow: 0 0 16px rgba(255, 170, 0, 0.2);
 }
 
 .running .btn-primary-toggle:hover:not(:disabled) {
-  background: #ff3344;
-  color: #ffffff;
-  box-shadow: 0 0 24px rgba(255, 51, 68, 0.4);
+  background: #ffaa00;
+  color: #000000;
+  box-shadow: 0 0 24px rgba(255, 170, 0, 0.4);
 }
 
 .btn-reset:hover:not(:disabled) {
-  color: #ffaa00;
-  border-color: rgba(255, 170, 0, 0.3);
+  color: #ff3344;
+  border-color: rgba(255, 51, 68, 0.3);
 }
 
 .shortcuts-hint {
@@ -492,6 +488,7 @@ body {
   font-weight: 600;
 }
 
+/* Study Metrics Card */
 .stats-summary-card {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -530,9 +527,11 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.stat-val.best { color: var(--color-fastest); }
-.stat-val.worst { color: var(--color-slowest); }
+.stat-val.highlight {
+  color: var(--accent-color);
+}
 
+/* Study Blocks Section */
 .laps-section {
   display: flex;
   flex-direction: column;
@@ -640,38 +639,6 @@ body {
 }
 
 .laps-table tr:hover td { background: var(--bg-hover); }
-
-.lap-row-fastest td {
-  color: var(--color-fastest);
-  background: rgba(0, 255, 136, 0.04);
-}
-
-.lap-row-slowest td {
-  color: var(--color-slowest);
-  background: rgba(255, 59, 48, 0.04);
-}
-
-.lap-delta-tag {
-  display: inline-block;
-  font-size: 0.65rem;
-  padding: 0.1rem 0.35rem;
-  border-radius: 4px;
-  margin-left: 0.4rem;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.lap-delta-tag.best {
-  background: rgba(0, 255, 136, 0.15);
-  color: var(--color-fastest);
-  border: 1px solid rgba(0, 255, 136, 0.3);
-}
-
-.lap-delta-tag.worst {
-  background: rgba(255, 59, 48, 0.15);
-  color: var(--color-slowest);
-  border: 1px solid rgba(255, 59, 48, 0.3);
-}
 
 .empty-laps {
   padding: 2.5rem 1rem;
@@ -866,14 +833,14 @@ body {
       <div class="brand">
         <div class="brand-icon" aria-hidden="true"></div>
         <div>
-          <h1 class="brand-title">CHRONO OLED</h1>
+          <h1 class="brand-title">CHRONO FOCUS</h1>
         </div>
-        <span class="brand-badge">PRO v1.0</span>
+        <span class="brand-badge">STUDY OLED</span>
       </div>
 
       <div class="header-actions">
         <!-- OLED Color Accent Picker -->
-        <div class="theme-picker-group" title="Select OLED Accent Color" role="radiogroup" aria-label="Color Palette">
+        <div class="theme-picker-group" title="Select OLED Focus Ambient Color" role="radiogroup" aria-label="Color Palette">
           <div class="theme-dot selected" data-pick="emerald" title="Matrix Emerald" role="radio" aria-checked="true" tabindex="0"></div>
           <div class="theme-dot" data-pick="cyan" title="Cyber Cyan" role="radio" aria-checked="false" tabindex="0"></div>
           <div class="theme-dot" data-pick="amber" title="Solar Amber" role="radio" aria-checked="false" tabindex="0"></div>
@@ -883,17 +850,17 @@ body {
         </div>
 
         <!-- Audio Mute/Sound Toggle -->
-        <button class="icon-btn active" id="soundToggleBtn" title="Toggle Mechanical Audio Tones (S)" aria-label="Toggle Sound">
+        <button class="icon-btn active" id="soundToggleBtn" title="Toggle Focus Audio Cues (S)" aria-label="Toggle Sound">
           🔊
         </button>
 
         <!-- Fullscreen Mode Toggle -->
-        <button class="icon-btn" id="fullscreenToggleBtn" title="Toggle Fullscreen OLED Mode (F)" aria-label="Toggle Fullscreen">
+        <button class="icon-btn" id="fullscreenToggleBtn" title="Toggle Fullscreen Focus Mode (F)" aria-label="Toggle Fullscreen">
           ⛶
         </button>
 
-        <!-- Memory / Past Sessions Drawer -->
-        <button class="icon-btn" id="historyToggleBtn" title="Saved Runs & Memory (M)" aria-label="View Saved Runs">
+        <!-- Memory / Study History Drawer -->
+        <button class="icon-btn" id="historyToggleBtn" title="Study Log & Memory (M)" aria-label="View Saved Sessions">
           🗂
         </button>
       </div>
@@ -903,7 +870,7 @@ body {
     <section class="status-bar" aria-label="Status Bar">
       <div class="pulse-indicator">
         <span class="pulse-dot" id="pulseDot" aria-hidden="true"></span>
-        <span id="statusPill">READY</span>
+        <span id="statusPill">READY TO STUDY</span>
       </div>
 
       <div class="precision-toggle" role="group" aria-label="Timer Precision">
@@ -914,19 +881,19 @@ body {
 
     <!-- Main OLED Hero Timer Display -->
     <section class="timer-hero" id="timerHero" aria-live="off">
-      <!-- Current Active Lap In-Flight Pill -->
+      <!-- Active Study Block Live Pill -->
       <div class="current-lap-preview" id="currentLapPreview" style="display: none;">
-        <span class="lap-pill" id="currentLapNumber">Lap 1</span>
+        <span class="lap-pill" id="currentLapNumber">Block 1</span>
         <span id="currentLapVal">00:00.00</span>
       </div>
 
       <!-- Massive Digital Digits -->
-      <div class="digits-container" aria-label="Elapsed Time">
+      <div class="digits-container" aria-label="Study Time">
         <span class="primary-time" id="primaryTime">00:00</span>
         <span class="millis-time" id="millisTime">.00</span>
       </div>
 
-      <!-- OLED Audio / Activity Visualizer -->
+      <!-- OLED Activity Visualizer -->
       <div class="audio-visualizer" aria-hidden="true">
         <div class="wave-bar"></div>
         <div class="wave-bar"></div>
@@ -937,82 +904,82 @@ body {
     </section>
 
     <!-- Primary Action Controls -->
-    <section class="controls-grid" aria-label="Stopwatch Controls">
-      <button class="btn-ctrl btn-primary-toggle" id="btnStart" aria-label="Start or Pause Stopwatch">
-        <span class="ctrl-icon">▶</span> Start
+    <section class="controls-grid" aria-label="Study Controls">
+      <button class="btn-ctrl btn-primary-toggle" id="btnStart" aria-label="Start Study or Take Break">
+        <span class="ctrl-icon">▶</span> Start Study
       </button>
 
-      <button class="btn-ctrl btn-lap" id="btnLap" disabled aria-label="Record Lap or Split Time">
-        <span class="ctrl-icon">⚑</span> Lap
+      <button class="btn-ctrl btn-lap" id="btnLap" disabled aria-label="Log Study Block or Split Interval">
+        <span class="ctrl-icon">✦</span> Next Block
       </button>
 
-      <button class="btn-ctrl btn-reset" id="btnReset" aria-label="Reset Stopwatch">
-        <span class="ctrl-icon">↻</span> Reset
+      <button class="btn-ctrl btn-reset" id="btnReset" aria-label="Finish and Save Study Session">
+        <span class="ctrl-icon">✓</span> End Session
       </button>
     </section>
 
     <!-- Keyboard Shortcuts Guide -->
     <div class="shortcuts-hint" aria-hidden="true">
-      <span><span class="kbd">Space</span> Start/Pause</span>
-      <span><span class="kbd">L</span> Lap</span>
-      <span><span class="kbd">R</span> Reset</span>
-      <span><span class="kbd">M</span> Memory</span>
-      <span><span class="kbd">F</span> Fullscreen</span>
+      <span><span class="kbd">Space</span> Start / Break</span>
+      <span><span class="kbd">L</span> Next Block</span>
+      <span><span class="kbd">R</span> End Session</span>
+      <span><span class="kbd">M</span> Study Log</span>
+      <span><span class="kbd">F</span> Fullscreen Focus</span>
     </div>
 
-    <!-- Live Performance Metrics Summary -->
-    <section class="stats-summary-card" aria-label="Run Metrics Summary">
+    <!-- Study Metrics Summary Card (Study-Tailored) -->
+    <section class="stats-summary-card" aria-label="Study Session Metrics">
       <div class="stat-item">
-        <span class="stat-label">Fastest Lap</span>
-        <span class="stat-val best" id="statBestLap">--:--.--</span>
+        <span class="stat-label">Total Study Time</span>
+        <span class="stat-val highlight" id="statTotalStudy">00:00.00</span>
       </div>
       <div class="stat-item">
-        <span class="stat-label">Slowest Lap</span>
-        <span class="stat-val worst" id="statWorstLap">--:--.--</span>
+        <span class="stat-label">Active Block</span>
+        <span class="stat-val" id="statCurrentBlock">--:--.--</span>
       </div>
       <div class="stat-item">
-        <span class="stat-label">Average Lap</span>
-        <span class="stat-val" id="statAvgLap">--:--.--</span>
+        <span class="stat-label">Average Block</span>
+        <span class="stat-val" id="statAvgBlock">--:--.--</span>
       </div>
       <div class="stat-item">
-        <span class="stat-label">Total Laps</span>
-        <span class="stat-val" id="statTotalLaps">0</span>
+        <span class="stat-label">Blocks Logged</span>
+        <span class="stat-val" id="statTotalBlocks">0</span>
       </div>
     </section>
 
-    <!-- Laps & Splits Table -->
-    <section class="laps-section" aria-label="Recorded Laps">
+    <!-- Study Blocks & Intervals Table -->
+    <section class="laps-section" aria-label="Study Blocks Log">
       <div class="laps-header-bar">
         <div class="laps-title">
-          <span>Lap Records</span>
+          <span>Study Blocks & Intervals</span>
           <span class="laps-count-badge" id="lapsCountBadge">0</span>
         </div>
         <div class="laps-actions">
-          <button class="btn-small" id="btnSaveSession" disabled title="Save current run into permanent memory">
-            💾 Archive Run
+          <button class="btn-small" id="btnSaveSession" disabled title="Archive this study session into memory">
+            💾 Archive Session
           </button>
-          <button class="btn-small" id="btnCopyLaps" disabled title="Copy lap table to clipboard">
-            📋 Copy
+          <button class="btn-small" id="btnCopyLaps" disabled title="Copy study blocks to clipboard">
+            📋 Copy Log
           </button>
-          <button class="btn-small" id="btnExportCsv" disabled title="Download laps as CSV file">
+          <button class="btn-small" id="btnExportCsv" disabled title="Download study log as CSV">
             ↓ CSV
           </button>
         </div>
       </div>
 
       <div class="laps-table-container">
-        <table class="laps-table" aria-label="Laps Table">
+        <table class="laps-table" aria-label="Study Blocks Table">
           <thead>
             <tr>
-              <th scope="col" style="width: 15%;">Lap</th>
-              <th scope="col" style="width: 35%;">Split Time</th>
-              <th scope="col" style="width: 30%;">Total Time</th>
-              <th scope="col" style="width: 20%;">Timestamp</th>
+              <th scope="col" style="width: 18%;">Block</th>
+              <th scope="col" style="width: 32%;">Block Duration</th>
+              <th scope="col" style="width: 30%;">Cumulative Study Time</th>
+              <th scope="col" style="width: 20%;">Time Logged</th>
             </tr>
           </thead>
           <tbody id="lapsTableBody">
             <tr>
-              <td colspan="4" class="empty-laps">No laps recorded yet. Press "Lap" while running or tap 'L'.</td>
+              <td colspan="4" class="empty-laps">No study blocks logged yet. Press "Next Block" (or tap 'L') as you finish chapters or topics.</td>
             </tr>
           </tbody>
         </table>
@@ -1021,12 +988,12 @@ body {
 
   </main>
 
-  <!-- Memory & Previous Sessions Modal Drawer -->
+  <!-- Memory & Study Session History Drawer -->
   <div class="modal-backdrop" id="memoryModal" role="dialog" aria-modal="true" aria-labelledby="memoryTitle">
     <div class="modal-card">
       <div class="modal-header">
         <div class="modal-title" id="memoryTitle">
-          <span>🗂 Memory & Archived Runs</span>
+          <span>🗂 Study Log & Session History</span>
         </div>
         <button class="modal-close-btn" id="memoryCloseBtn" aria-label="Close Modal">✕</button>
       </div>
@@ -1038,11 +1005,11 @@ body {
       </div>
 
       <div class="modal-footer">
-        <button class="btn-small" id="btnExportJson" title="Backup all saved sessions as JSON">
+        <button class="btn-small" id="btnExportJson" title="Backup all study sessions as JSON">
           ↓ Backup JSON
         </button>
-        <button class="btn-small" id="btnClearAllHistory" style="color:var(--color-slowest);" title="Clear memory database">
-          ✕ Clear All Memory
+        <button class="btn-small" id="btnClearAllHistory" style="color:var(--color-slowest);" title="Clear study memory database">
+          ✕ Clear All History
         </button>
       </div>
     </div>
@@ -1054,8 +1021,8 @@ body {
   <!-- Standalone Application Logic -->
   <script>
 /**
- * CHRONO OLED - High-Precision Standalone Stopwatch Engine
- * True zero-drift architecture with background Web Worker Blob & Wall-clock delta sync.
+ * CHRONO FOCUS - High-Precision Study & Productivity Timer Engine
+ * Zero-drift architecture with background Web Worker Blob & Wall-clock delta sync.
  */
 (function () {
   'use strict';
@@ -1108,8 +1075,8 @@ body {
     clickStop() { this.playTone(440, 'sine', 0.06, 0.12); }
     clickLap() { this.playTone(1320, 'sine', 0.04, 0.1); }
     clickReset() {
-      this.playTone(350, 'sine', 0.08, 0.1);
-      setTimeout(() => this.playTone(280, 'sine', 0.1, 0.08), 70);
+      this.playTone(520, 'sine', 0.08, 0.1);
+      setTimeout(() => this.playTone(660, 'sine', 0.1, 0.08), 80);
     }
   }
 
@@ -1138,8 +1105,8 @@ body {
     return new Worker(URL.createObjectURL(blob));
   }
 
-  // --- Main Stopwatch Application ---
-  class ChronoStopwatch {
+  // --- Main Stopwatch / Study Timer Application ---
+  class ChronoStudyTimer {
     constructor() {
       this.running = false;
       this.startTime = 0;
@@ -1175,10 +1142,10 @@ body {
         themeDots: document.querySelectorAll('.theme-dot'),
         lapsTableBody: document.getElementById('lapsTableBody'),
         lapsCountBadge: document.getElementById('lapsCountBadge'),
-        statBestLap: document.getElementById('statBestLap'),
-        statWorstLap: document.getElementById('statWorstLap'),
-        statAvgLap: document.getElementById('statAvgLap'),
-        statTotalLaps: document.getElementById('statTotalLaps'),
+        statTotalStudy: document.getElementById('statTotalStudy'),
+        statCurrentBlock: document.getElementById('statCurrentBlock'),
+        statAvgBlock: document.getElementById('statAvgBlock'),
+        statTotalBlocks: document.getElementById('statTotalBlocks'),
         btnCopyLaps: document.getElementById('btnCopyLaps'),
         btnExportCsv: document.getElementById('btnExportCsv'),
         memoryModal: document.getElementById('memoryModal'),
@@ -1256,6 +1223,21 @@ body {
       return parts.mainStr + parts.millisStr;
     }
 
+    formatFriendlyDuration(ms) {
+      const totalSeconds = Math.floor(ms / 1000);
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+
+      if (hours > 0) {
+        return `${hours}h ${minutes}m ${seconds}s`;
+      }
+      if (minutes > 0) {
+        return `${minutes}m ${seconds}s`;
+      }
+      return `${seconds}s`;
+    }
+
     saveRunState() {
       const state = {
         running: this.running,
@@ -1267,15 +1249,15 @@ body {
         savedAt: Date.now()
       };
       try {
-        localStorage.setItem('chrono_oled_active_run', JSON.stringify(state));
+        localStorage.setItem('chrono_focus_active_session', JSON.stringify(state));
       } catch (e) {
-        console.warn('Failed to save run state', e);
+        console.warn('Failed to save session state', e);
       }
     }
 
     restoreRunState() {
       try {
-        const raw = localStorage.getItem('chrono_oled_active_run');
+        const raw = localStorage.getItem('chrono_focus_active_session');
         if (!raw) return;
         const state = JSON.parse(raw);
         if (!state) return;
@@ -1291,7 +1273,7 @@ body {
           this.startEngine();
         }
       } catch (e) {
-        console.warn('Failed to restore run state', e);
+        console.warn('Failed to restore session state', e);
       }
     }
 
@@ -1315,7 +1297,7 @@ body {
 
     loadHistory() {
       try {
-        const raw = localStorage.getItem('chrono_oled_history');
+        const raw = localStorage.getItem('chrono_focus_study_history');
         this.savedRuns = raw ? JSON.parse(raw) : [];
       } catch (e) {
         this.savedRuns = [];
@@ -1324,7 +1306,7 @@ body {
 
     saveHistory() {
       try {
-        localStorage.setItem('chrono_oled_history', JSON.stringify(this.savedRuns));
+        localStorage.setItem('chrono_focus_study_history', JSON.stringify(this.savedRuns));
       } catch (e) {
         console.warn('Failed to save history', e);
       }
@@ -1336,7 +1318,7 @@ body {
           if (this.running) {
             const elapsed = this.getElapsedTime();
             const formatted = this.formatFullTime(elapsed, 2);
-            document.title = `⏱ ${formatted} - CHRONO OLED`;
+            document.title = `⏱ ${formatted} - CHRONO FOCUS`;
             if (Math.random() < 0.05) {
               this.saveRunState();
             }
@@ -1349,8 +1331,8 @@ body {
       this.worker.postMessage({ command: 'start', interval: 35 });
       this.startRafLoop();
       document.body.classList.add('running');
-      this.dom.btnStart.innerHTML = '<span class="ctrl-icon">⏸</span> Pause';
-      this.dom.statusPill.textContent = 'RUNNING';
+      this.dom.btnStart.innerHTML = '<span class="ctrl-icon">⏸</span> Pause (Break)';
+      this.dom.statusPill.textContent = 'STUDYING IN PROGRESS';
       this.dom.btnLap.disabled = false;
       this.dom.btnSaveSession.disabled = false;
     }
@@ -1362,10 +1344,10 @@ body {
         this.rafId = null;
       }
       document.body.classList.remove('running');
-      this.dom.btnStart.innerHTML = '<span class="ctrl-icon">▶</span> Start';
-      this.dom.statusPill.textContent = this.accumulatedTime > 0 ? 'PAUSED' : 'READY';
+      this.dom.btnStart.innerHTML = '<span class="ctrl-icon">▶</span> Resume Study';
+      this.dom.statusPill.textContent = this.accumulatedTime > 0 ? 'ON BREAK / PAUSED' : 'READY TO STUDY';
       this.dom.btnLap.disabled = true;
-      document.title = 'CHRONO OLED - High-Precision Stopwatch';
+      document.title = 'CHRONO FOCUS - Study & Focus Timer';
       this.saveRunState();
     }
 
@@ -1421,7 +1403,7 @@ body {
       this.audio.clickLap();
       this.updateLapsUI();
       this.saveRunState();
-      this.showToast(`Lap ${lapNumber} recorded: ${this.formatFullTime(lapDuration)}`);
+      this.showToast(`Block #${lapNumber} logged: ${this.formatFriendlyDuration(lapDuration)}`);
     }
 
     reset() {
@@ -1443,27 +1425,22 @@ body {
       this.audio.clickReset();
       this.render();
       this.updateLapsUI();
-      localStorage.removeItem('chrono_oled_active_run');
+      localStorage.removeItem('chrono_focus_active_session');
       this.dom.btnSaveSession.disabled = true;
-      this.showToast('Stopwatch reset. Session archived to memory.');
+      this.dom.btnStart.innerHTML = '<span class="ctrl-icon">▶</span> Start Study';
+      this.showToast('Study session finished and archived to memory! ✓');
     }
 
     archiveCurrentRun(notify = true) {
       const totalTime = this.getElapsedTime();
       if (totalTime < 500 && this.laps.length === 0) return;
 
-      let bestLapMs = null;
-      if (this.laps.length > 0) {
-        bestLapMs = Math.min(...this.laps.map(l => l.duration));
-      }
-
       const session = {
-        id: 'run_' + Date.now(),
+        id: 'study_' + Date.now(),
         date: new Date().toLocaleDateString(),
-        time: new Date().toLocaleTimeString(),
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         totalTime: totalTime,
-        lapCount: this.laps.length,
-        bestLap: bestLapMs,
+        blockCount: this.laps.length > 0 ? this.laps.length : 1,
         laps: [...this.laps]
       };
 
@@ -1472,7 +1449,7 @@ body {
       this.saveHistory();
 
       if (notify) {
-        this.showToast('Session saved to permanent memory! ✓');
+        this.showToast('Study session archived to memory! ✓');
       }
     }
 
@@ -1483,11 +1460,18 @@ body {
       this.dom.primaryTime.textContent = parts.mainStr;
       this.dom.millisTime.textContent = parts.millisStr;
 
+      // Update Live Study Metrics
+      this.dom.statTotalStudy.textContent = this.formatFullTime(elapsed, this.precision);
+
+      const currentBlockMs = this.getCurrentLapTime();
+      this.dom.statCurrentBlock.textContent = (this.running || this.accumulatedLapTime > 0)
+        ? this.formatFullTime(currentBlockMs, this.precision)
+        : '--:--.--';
+
       if (this.running || this.laps.length > 0) {
         this.dom.currentLapPreview.style.display = 'flex';
-        this.dom.currentLapNumber.textContent = `Lap ${this.laps.length + 1}`;
-        const currentLapMs = this.getCurrentLapTime();
-        this.dom.currentLapVal.textContent = this.formatFullTime(currentLapMs, this.precision);
+        this.dom.currentLapNumber.textContent = `Block ${this.laps.length + 1}`;
+        this.dom.currentLapVal.textContent = this.formatFullTime(currentBlockMs, this.precision);
       } else {
         this.dom.currentLapPreview.style.display = 'none';
       }
@@ -1496,17 +1480,15 @@ body {
     updateLapsUI() {
       const laps = this.laps;
       this.dom.lapsCountBadge.textContent = laps.length;
-      this.dom.statTotalLaps.textContent = laps.length;
+      this.dom.statTotalBlocks.textContent = laps.length;
 
       if (laps.length === 0) {
         this.dom.lapsTableBody.innerHTML = `
           <tr>
-            <td colspan="4" class="empty-laps">No laps recorded yet. Press "Lap" while running or tap 'L'.</td>
+            <td colspan="4" class="empty-laps">No study blocks logged yet. Press "Next Block" (or tap 'L') as you finish chapters or topics.</td>
           </tr>
         `;
-        this.dom.statBestLap.textContent = '--:--.--';
-        this.dom.statWorstLap.textContent = '--:--.--';
-        this.dom.statAvgLap.textContent = '--:--.--';
+        this.dom.statAvgBlock.textContent = '--:--.--';
         this.dom.btnCopyLaps.disabled = true;
         this.dom.btnExportCsv.disabled = true;
         return;
@@ -1515,48 +1497,22 @@ body {
       this.dom.btnCopyLaps.disabled = false;
       this.dom.btnExportCsv.disabled = false;
 
-      let minDuration = Infinity;
-      let maxDuration = -Infinity;
       let sumDuration = 0;
-
       for (let i = 0; i < laps.length; i++) {
-        const d = laps[i].duration;
-        sumDuration += d;
-        if (d < minDuration) minDuration = d;
-        if (d > maxDuration) maxDuration = d;
+        sumDuration += laps[i].duration;
       }
-
       const avgDuration = Math.round(sumDuration / laps.length);
-
-      this.dom.statBestLap.textContent = this.formatFullTime(minDuration, 2);
-      this.dom.statWorstLap.textContent = laps.length > 1 ? this.formatFullTime(maxDuration, 2) : '--:--.--';
-      this.dom.statAvgLap.textContent = this.formatFullTime(avgDuration, 2);
+      this.dom.statAvgBlock.textContent = this.formatFullTime(avgDuration, 2);
 
       let html = '';
       for (let i = 0; i < laps.length; i++) {
         const lap = laps[i];
-        let rowClass = '';
-        let deltaHtml = '';
-
-        if (laps.length > 1) {
-          if (lap.duration === minDuration) {
-            rowClass = 'lap-row-fastest';
-            deltaHtml = '<span class="lap-delta-tag best">▲ Best</span>';
-          } else if (lap.duration === maxDuration) {
-            rowClass = 'lap-row-slowest';
-            deltaHtml = '<span class="lap-delta-tag worst">▼ Slow</span>';
-          } else {
-            const diff = lap.duration - minDuration;
-            deltaHtml = `<span style="color:var(--text-muted); font-size:0.75rem;">+${this.formatFullTime(diff, 2)}</span>`;
-          }
-        }
-
         html += `
-          <tr class="${rowClass}">
-            <td>#${lap.number}</td>
-            <td><strong>${this.formatFullTime(lap.duration, this.precision)}</strong> ${deltaHtml}</td>
+          <tr>
+            <td><strong style="color:var(--accent-color);">Block #${lap.number}</strong></td>
+            <td><strong>${this.formatFullTime(lap.duration, this.precision)}</strong> <span style="color:var(--text-muted); font-size:0.75rem;">(${this.formatFriendlyDuration(lap.duration)})</span></td>
             <td>${this.formatFullTime(lap.totalTime, this.precision)}</td>
-            <td style="color:var(--text-muted); font-size:0.75rem;">${new Date(lap.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
+            <td style="color:var(--text-muted); font-size:0.75rem;">${new Date(lap.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
           </tr>
         `;
       }
@@ -1568,7 +1524,7 @@ body {
       if (this.savedRuns.length === 0) {
         this.dom.savedRunsList.innerHTML = `
           <div style="text-align:center; padding:3rem 1rem; color:var(--text-dim); font-family:var(--font-mono);">
-            No archived sessions in memory. Resetting a stopwatch session automatically saves it here!
+            No archived study sessions in memory. Ending a study session automatically saves it here!
           </div>
         `;
         return;
@@ -1576,22 +1532,20 @@ body {
 
       let html = '';
       this.savedRuns.forEach((run, index) => {
-        const bestLapStr = run.bestLap ? this.formatFullTime(run.bestLap, 2) : 'N/A';
         html += `
           <div class="saved-run-item" data-id="${run.id}">
             <div class="saved-run-header">
               <span class="saved-run-title">
-                Session #${this.savedRuns.length - index}
+                Study Session #${this.savedRuns.length - index}
               </span>
-              <span class="saved-run-date">${run.date} ${run.time}</span>
+              <span class="saved-run-date">${run.date} at ${run.time}</span>
             </div>
             <div class="saved-run-metrics">
-              <div>Total: <span class="metric-highlight">${this.formatFullTime(run.totalTime, 2)}</span></div>
-              <div>Laps: <span style="color:var(--text-main); font-weight:600;">${run.lapCount}</span></div>
-              <div>Best Lap: <span style="color:var(--color-fastest); font-weight:600;">${bestLapStr}</span></div>
+              <div>Total Focus: <span class="metric-highlight">${this.formatFriendlyDuration(run.totalTime)}</span></div>
+              <div>Blocks: <span style="color:var(--text-main); font-weight:600;">${run.blockCount || run.lapCount || 0}</span></div>
             </div>
             <div class="saved-run-footer">
-              <button class="btn-small btn-restore-run" data-id="${run.id}">Restore Laps</button>
+              <button class="btn-small btn-restore-run" data-id="${run.id}">Restore to Timer</button>
               <button class="btn-small btn-delete-run" data-id="${run.id}" style="color:var(--color-slowest);">Delete</button>
             </div>
           </div>
@@ -1615,7 +1569,7 @@ body {
           const id = e.currentTarget.dataset.id;
           const run = this.savedRuns.find(r => r.id === id);
           if (run) {
-            this.laps = [...run.laps];
+            this.laps = [...(run.laps || [])];
             this.accumulatedTime = run.totalTime;
             this.accumulatedLapTime = 0;
             this.running = false;
@@ -1623,7 +1577,7 @@ body {
             this.render();
             this.updateLapsUI();
             this.closeMemoryModal();
-            this.showToast('Session laps restored to main board.');
+            this.showToast('Study session restored to main timer.');
           }
         });
       });
@@ -1639,29 +1593,29 @@ body {
     }
 
     clearAllHistory() {
-      if (confirm('Clear all archived sessions from memory?')) {
+      if (confirm('Clear all archived study sessions from memory?')) {
         this.savedRuns = [];
         this.saveHistory();
         this.renderMemoryModal();
-        this.showToast('All session memory cleared.');
+        this.showToast('All study history cleared.');
       }
     }
 
     copyLapsToClipboard() {
       if (this.laps.length === 0) return;
-      let text = `CHRONO OLED - Lap Times\n`;
-      text += `Total Duration: ${this.formatFullTime(this.getElapsedTime())}\n`;
-      text += `Total Laps: ${this.laps.length}\n`;
+      let text = `CHRONO FOCUS - Study Log\n`;
+      text += `Total Study Time: ${this.formatFriendlyDuration(this.getElapsedTime())}\n`;
+      text += `Completed Blocks: ${this.laps.length}\n`;
       text += `----------------------------------------\n`;
-      text += `Lap #\tLap Time\tTotal Time\n`;
+      text += `Block\tBlock Duration\tTotal Study Time\n`;
 
       const sorted = [...this.laps].reverse();
       sorted.forEach(l => {
-        text += `#${l.number}\t${this.formatFullTime(l.duration, this.precision)}\t${this.formatFullTime(l.totalTime, this.precision)}\n`;
+        text += `Block #${l.number}\t${this.formatFriendlyDuration(l.duration)}\t${this.formatFullTime(l.totalTime, this.precision)}\n`;
       });
 
       navigator.clipboard.writeText(text).then(() => {
-        this.showToast('Lap times copied to clipboard! ✓');
+        this.showToast('Study log copied to clipboard! ✓');
       }).catch(() => {
         this.showToast('Failed to copy to clipboard.');
       });
@@ -1669,39 +1623,39 @@ body {
 
     exportCsv() {
       if (this.laps.length === 0) return;
-      let csv = 'LapNumber,LapDurationFormatted,LapDurationMs,TotalTimeFormatted,TotalTimeMs,RecordedTime\n';
+      let csv = 'BlockNumber,BlockDurationFormatted,BlockDurationMs,TotalStudyTimeFormatted,TotalStudyTimeMs,RecordedTime\n';
       const sorted = [...this.laps].reverse();
       sorted.forEach(l => {
-        csv += `${l.number},"${this.formatFullTime(l.duration, this.precision)}",${l.duration},"${this.formatFullTime(l.totalTime, this.precision)}",${l.totalTime},"${new Date(l.timestamp).toISOString()}"\n`;
+        csv += `${l.number},"${this.formatFriendlyDuration(l.duration)}",${l.duration},"${this.formatFullTime(l.totalTime, this.precision)}",${l.totalTime},"${new Date(l.timestamp).toISOString()}"\n`;
       });
 
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.setAttribute('href', url);
-      link.setAttribute('download', `chrono_laps_${Date.now()}.csv`);
+      link.setAttribute('download', `study_blocks_${Date.now()}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      this.showToast('Exported CSV file. ✓');
+      this.showToast('Exported study log as CSV. ✓');
     }
 
     exportHistoryJson() {
       if (this.savedRuns.length === 0) {
-        this.showToast('No sessions in memory to export.');
+        this.showToast('No study sessions in memory to export.');
         return;
       }
       const blob = new Blob([JSON.stringify(this.savedRuns, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.setAttribute('href', url);
-      link.setAttribute('download', `chrono_memory_backup_${Date.now()}.json`);
+      link.setAttribute('download', `study_history_backup_${Date.now()}.json`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      this.showToast('Exported memory JSON backup. ✓');
+      this.showToast('Exported study history backup. ✓');
     }
 
     setPrecision(p) {
@@ -1793,7 +1747,7 @@ body {
         if (e.code === 'Space') {
           e.preventDefault();
           this.toggleStartStop();
-        } else if (e.code === 'KeyL') {
+        } else if (e.code === 'KeyL' || e.code === 'KeyB') {
           e.preventDefault();
           this.recordLap();
         } else if (e.code === 'KeyR') {
@@ -1824,9 +1778,9 @@ body {
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => new ChronoStopwatch());
+    document.addEventListener('DOMContentLoaded', () => new ChronoStudyTimer());
   } else {
-    new ChronoStopwatch();
+    new ChronoStudyTimer();
   }
 })();
   </script>
