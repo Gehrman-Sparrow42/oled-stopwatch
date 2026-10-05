@@ -251,6 +251,9 @@
           <span class="stat-val" id="weekTopSubject">None</span>
         </div>
         <div class="week-stat-actions">
+          <button class="btn-small" id="btnOpenQuickImport" title="Quick-paste multi-day study notes (e.g. 06/04 120 dk diff)">
+            📥 Paste Diary
+          </button>
           <button class="btn-small" id="btnCopyWeekDiary" title="Copy entire week diary notes to clipboard">
             📋 Copy Diary
           </button>
@@ -271,7 +274,7 @@
 
   <!-- Manual Add Time Modal -->
   <div class="modal-backdrop" id="manualTimeModal" role="dialog" aria-modal="true" aria-labelledby="manualTimeTitle">
-    <div class="modal-card" style="max-width: 440px;">
+    <div class="modal-card modal-card-sm">
       <div class="modal-header">
         <div class="modal-title" id="manualTimeTitle">
           <span>+ Log Offline Study Time</span>
@@ -289,10 +292,11 @@
             <input type="text" id="manualSubjectInput" class="form-input" placeholder="e.g. Math, Coding, Reading" value="Overall Work" required>
           </div>
           <div class="form-group">
-            <label class="form-label" for="manualHoursInput">Hours Studied</label>
-            <input type="number" id="manualHoursInput" class="form-input" min="0" max="24" step="0.25" placeholder="e.g. 1.5 (or 2)" required>
+            <label class="form-label" for="manualHoursInput">Time Studied (Minutes or Hours)</label>
+            <input type="text" id="manualHoursInput" class="form-input" placeholder="e.g. 120 dk, 90m, 1.5h, 45" required>
+            <span class="modal-footer-hint">Accepts minutes (e.g. 120 dk, 90m) or hours (e.g. 1.5h)</span>
           </div>
-          <button type="submit" class="btn-ctrl btn-primary-toggle" style="margin-top: 0.5rem;">
+          <button type="submit" class="btn-ctrl btn-primary-toggle btn-form-submit">
             Save to Day
           </button>
         </form>
@@ -329,7 +333,7 @@
 
   <!-- Settings & Subject Manager Modal -->
   <div class="modal-backdrop" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
-    <div class="modal-card" style="max-width: 580px;">
+    <div class="modal-card modal-card-md">
       <div class="modal-header">
         <div class="modal-title" id="settingsTitle">
           <span>⚙ Preferences & Customization</span>
@@ -337,7 +341,7 @@
         <button class="modal-close-btn" id="settingsCloseBtn" aria-label="Close Settings">✕</button>
       </div>
 
-      <div class="modal-body" style="gap: 1.25rem;">
+      <div class="modal-body modal-body-spacious">
         <!-- Manage Custom Subjects -->
         <div class="settings-section">
           <div class="settings-section-title">
@@ -348,8 +352,8 @@
             <!-- Dynamically populated tags with delete buttons -->
           </div>
           <form id="addSubjectForm" class="add-subject-inline">
-            <input type="text" id="newSubjectInput" class="settings-input" placeholder="New subject (e.g. Physics, History, Gym)" style="flex:1;" required>
-            <button type="submit" class="btn-small" style="color:var(--accent-color); border-color:var(--accent-border);">+ Add Subject</button>
+            <input type="text" id="newSubjectInput" class="settings-input settings-input-flex" placeholder="New subject (e.g. Physics, History, Gym)" required>
+            <button type="submit" class="btn-small btn-add-subject">+ Add Subject</button>
           </form>
         </div>
 
@@ -408,8 +412,41 @@
       </div>
 
       <div class="modal-footer">
-        <span style="font-family:var(--font-mono); font-size:0.75rem; color:var(--text-dim);">Changes save automatically</span>
+        <span class="modal-footer-hint">Changes save automatically</span>
         <button class="btn-small" id="settingsDoneBtn">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick-Paste Multi-Day Diary Modal -->
+  <div class="modal-backdrop" id="quickImportModal" role="dialog" aria-modal="true" aria-labelledby="quickImportTitle">
+    <div class="modal-card modal-card-md">
+      <div class="modal-header">
+        <div class="modal-title" id="quickImportTitle">
+          <span>📥 Quick-Paste Study Diary</span>
+        </div>
+        <button class="modal-close-btn" id="quickImportCloseBtn" aria-label="Close Modal">✕</button>
+      </div>
+      <div class="modal-body modal-body-spacious">
+        <p class="modal-footer-hint">
+          Paste your notebook diary notes below. Lines like <code>06/04</code> set the date, followed by entries like <code>120 dk diff</code>, <code>70 dk molbio</code>, or <code>nothin</code>.
+        </p>
+        <textarea id="quickImportTextarea" class="quick-import-textarea" placeholder="06/04&#10;120 dk diff&#10;07/04&#10;55 dk diff&#10;70 dk molbio&#10;08/04&#10;100dk molbio&#10;09/04&#10;40 dk molbio diff eq tekrar&#10;130 dk mass&#10;11/04&#10;nothin"></textarea>
+        
+        <div class="settings-field">
+          <label class="settings-label" for="importYearSelect">Calendar Year</label>
+          <select id="importYearSelect" class="settings-select">
+            <!-- Populated dynamically with years -->
+          </select>
+        </div>
+
+        <div class="import-preview-box" id="importPreviewBox">
+          <span>Click "⚡ Parse &amp; Preview" to inspect parsed days and subjects...</span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-small" id="btnPreviewImport">⚡ Parse &amp; Preview</button>
+        <button class="btn-small btn-primary-accent" id="btnApplyImport" disabled>Import to Diary ✓</button>
       </div>
     </div>
   </div>

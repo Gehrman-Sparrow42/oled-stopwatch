@@ -136,6 +136,82 @@
     return `${minutes}m`;
   }
 
+  // --- Flexible Duration & Note Line Parsers ---
+  function parseDurationString(str) {
+    if (!str) return null;
+    const s = str.trim();
+    // Match e.g. "120 dk", "120dk", "90min", "90 min", "55m", "1.5h", "2 hours", "45"
+    const match = s.match(/^(\d+(?:\.\d+)?)\s*(dk|dakika|min|m|hours?|hrs?|h)?$/i);
+    if (match) {
+      const num = parseFloat(match[1]);
+      const unit = (match[2] || '').toLowerCase();
+      if (['dk', 'dakika', 'min', 'm'].includes(unit)) {
+        return num * 60 * 1000;
+      } else if (['h', 'hr', 'hrs', 'hour', 'hours'].includes(unit)) {
+        return num * 3600 * 1000;
+      } else {
+        // No unit: if >= 15 assume minutes, else assume hours
+        return (num >= 15 ? num * 60 : num * 3600) * 1000;
+      }
+    }
+    return null;
+  }
+
+  function parseStudyLine(line, existingSubjects = []) {
+    const trimmed = line.trim();
+    if (!trimmed) return null;
+
+    // Check rest / nothing / dinlenme
+    if (/^(nothin|nothing|rest|dinlenme|bos|boş|tatil|off|yok|none)$/i.test(trimmed)) {
+      return { isRest: true, note: trimmed };
+    }
+
+    // Check "120 dk diff", "55 dk diff", "40 dk molbio diff eq tekrar", "100dk molbio"
+    const match = trimmed.match(/^(\d+(?:\.\d+)?)\s*(?:(dk|dakika|min|m|hours?|hrs?|h)\b)?\s*(.*)$/i);
+    if (match) {
+      const num = parseFloat(match[1]);
+      const unit = (match[2] || '').toLowerCase();
+      let durationMs = 0;
+      if (['dk', 'dakika', 'min', 'm'].includes(unit)) {
+        durationMs = num * 60 * 1000;
+      } else if (['h', 'hr', 'hrs', 'hour', 'hours'].includes(unit)) {
+        durationMs = num * 3600 * 1000;
+      } else {
+        durationMs = (num >= 15 ? num * 60 : num * 3600) * 1000;
+      }
+
+      const rest = (match[3] || '').trim();
+      if (!rest) {
+        return { durationMs, subject: 'Overall Work', note: '' };
+      }
+
+      let subject = rest;
+      let note = '';
+
+      // Check if rest begins with an existing subject
+      const lowerRest = rest.toLowerCase();
+      const sortedSubs = [...existingSubjects].sort((a, b) => b.length - a.length);
+      for (const sub of sortedSubs) {
+        if (lowerRest === sub.toLowerCase() || lowerRest.startsWith(sub.toLowerCase() + ' ')) {
+          subject = sub;
+          note = rest.slice(sub.length).trim();
+          return { durationMs, subject, note };
+        }
+      }
+
+      // Check keywords like "tekrar", "review", "ch", "chapter", "hw", "soru", "lab"
+      const keywordMatch = rest.match(/^(.*?)\s+(tekrar|review|ch(?:apter)?|\d+|soru|ödev|hw|quiz|exam|test|lab|çalışma)\b(.*)$/i);
+      if (keywordMatch && keywordMatch[1].trim()) {
+        subject = keywordMatch[1].trim();
+        note = (keywordMatch[2] + ' ' + (keywordMatch[3] || '')).trim();
+      }
+
+      return { durationMs, subject, note };
+    }
+
+    return { isTextOnly: true, note: trimmed };
+  }
+
   // --- Main Application Engine ---
   class ChronoStudyApp {
     constructor() {
@@ -223,6 +299,7 @@
         weekTotalTime: document.getElementById('weekTotalTime'),
         weekDailyAvg: document.getElementById('weekDailyAvg'),
         weekTopSubject: document.getElementById('weekTopSubject'),
+        btnOpenQuickImport: document.getElementById('btnOpenQuickImport'),
         btnCopyWeekDiary: document.getElementById('btnCopyWeekDiary'),
         btnExportWeekMd: document.getElementById('btnExportWeekMd'),
         notebookDaysList: document.getElementById('notebookDaysList'),
@@ -250,6 +327,14 @@
         settingWeekStart: document.getElementById('settingWeekStart'),
         settingDateFormat: document.getElementById('settingDateFormat'),
         settingIntervalChime: document.getElementById('settingIntervalChime'),
+        // Quick Import Modal
+        quickImportModal: document.getElementById('quickImportModal'),
+        quickImportCloseBtn: document.getElementById('quickImportCloseBtn'),
+        quickImportTextarea: document.getElementById('quickImportTextarea'),
+        importYearSelect: document.getElementById('importYearSelect'),
+        importPreviewBox: document.getElementById('importPreviewBox'),
+        btnPreviewImport: document.getElementById('btnPreviewImport'),
+        btnApplyImport: document.getElementById('btnApplyImport'),
         toast: document.getElementById('toast')
       };
     }
@@ -919,7 +1004,7 @@
             }
           }
         } else {
-          subjectsHtml = `<span style="color:var(--text-dim); font-size:0.72rem; font-family:var(--font-mono);">No subjects logged yet</span>`;
+          subjectsHtml = `<span class="empty-subjects-hint">No subjects logged yet</span>`;
         }
 
         // Goal completion percentage
@@ -957,12 +1042,15 @@
             </div>
 
             <div class="notebook-textarea-wrap">
-              <textarea class="notebook-textarea" data-daykey="${dayKey}" placeholder="Notes for ${dayName} ${dayDisplay}: topics covered, problem sets, what you learned, or diary reflections...">${notesVal}</textarea>
+              <textarea class="notebook-textarea" data-daykey="${dayKey}" placeholder="Notes for ${dayName} ${dayDisplay}: e.g. 120 dk diff, 70 dk molbio, topics covered, problem sets...">${notesVal}</textarea>
             </div>
 
             <div class="notebook-footer">
               <span class="auto-save-indicator" id="saveIndicator_${dayKey}">Auto-saved ✓</span>
               <div class="notebook-quick-actions">
+                <button class="btn-tiny btn-sync-notes" data-daykey="${dayKey}" title="Parse note lines like '120 dk diff' or '70 dk molbio' into logged study hours">
+                  ⚡ Sync Note
+                </button>
                 <button class="btn-tiny btn-stamp-stats" data-daykey="${dayKey}" data-dayname="${dayName}" data-daydate="${dayDisplay}" title="Insert summary of today's study hours into notes">
                   + Stamp Hours
                 </button>
@@ -1037,6 +1125,14 @@
         });
       });
 
+      // Bind Sync Notes to Hours Button
+      this.dom.notebookDaysList.querySelectorAll('.btn-sync-notes').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const key = e.currentTarget.dataset.daykey;
+          this.syncNotesForDay(key);
+        });
+      });
+
       // Bind Add Time Modal Trigger
       this.dom.notebookDaysList.querySelectorAll('.btn-open-manual-time').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -1064,21 +1160,245 @@
     handleManualTimeSubmit(e) {
       e.preventDefault();
       const dayKey = this.dom.manualDayTarget.dataset.daykey;
-      const subject = this.dom.manualSubjectInput.value.trim() || 'Overall Work';
-      const hours = parseFloat(this.dom.manualHoursInput.value);
+      let subject = this.dom.manualSubjectInput.value.trim() || 'Overall Work';
+      const rawInput = this.dom.manualHoursInput.value.trim();
 
-      if (isNaN(hours) || hours <= 0) {
-        this.showToast('Please enter a valid amount of hours.');
+      // Check if user entered shorthand line (e.g. "120 dk diff" or "90m molbio")
+      const parsedLine = parseStudyLine(rawInput, this.customSubjects);
+      let durationMs = 0;
+
+      if (parsedLine && !parsedLine.isRest && !parsedLine.isTextOnly && parsedLine.durationMs > 0) {
+        durationMs = parsedLine.durationMs;
+        if (parsedLine.subject && parsedLine.subject !== 'Overall Work') {
+          subject = parsedLine.subject;
+        }
+      } else {
+        durationMs = parseDurationString(rawInput);
+      }
+
+      if (!durationMs || durationMs <= 0) {
+        this.showToast('Please enter a valid duration (e.g. 120 dk, 90m, 1.5h).');
         return;
       }
 
-      // Add subject to custom subjects if not present
       this.addSubject(subject);
-
-      const durationMs = Math.round(hours * 3600 * 1000);
       this.logTimeToDiary(dayKey, subject, durationMs);
       this.closeManualTimeModal();
-      this.showToast(`Added ${hours}h (${subject}) to ${this.dom.manualDayTarget.value}! ✓`);
+      this.showToast(`Added ${formatDurationFriendly(durationMs)} (${subject}) to ${this.dom.manualDayTarget.value}! ✓`);
+    }
+
+    syncNotesForDay(dayKey) {
+      const textarea = this.dom.notebookDaysList.querySelector(`.notebook-textarea[data-daykey="${dayKey}"]`);
+      if (!textarea) return;
+
+      const text = textarea.value;
+      const lines = text.split('\n');
+      let parsedCount = 0;
+      let totalAddedMs = 0;
+
+      if (!this.studyDiary[dayKey]) {
+        this.studyDiary[dayKey] = { totalMs: 0, subjects: {}, notes: text };
+      }
+
+      for (const line of lines) {
+        const res = parseStudyLine(line, this.customSubjects);
+        if (res && res.durationMs > 0) {
+          const sub = res.subject || 'Overall Work';
+          this.addSubject(sub);
+          this.studyDiary[dayKey].subjects[sub] = (this.studyDiary[dayKey].subjects[sub] || 0) + res.durationMs;
+          totalAddedMs += res.durationMs;
+          parsedCount++;
+        }
+      }
+
+      if (parsedCount > 0) {
+        let newDayTotal = 0;
+        for (const ms of Object.values(this.studyDiary[dayKey].subjects)) {
+          newDayTotal += ms;
+        }
+        this.studyDiary[dayKey].totalMs = newDayTotal;
+        this.saveDiary();
+        this.renderDiaryView();
+        this.showToast(`⚡ Synced ${parsedCount} entries (${formatDurationFriendly(totalAddedMs)}) from notes into day! ✓`);
+      } else {
+        this.showToast('No duration entries found to sync. Example format: "120 dk diff" or "90m molbio".');
+      }
+    }
+
+    // --- Multi-Day Quick-Paste Diary Modal ---
+    openQuickImportModal() {
+      const currentYear = new Date().getFullYear();
+      const years = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1];
+      this.dom.importYearSelect.innerHTML = years.map(y => `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`).join('');
+      this.dom.quickImportModal.classList.add('open');
+      this.dom.quickImportTextarea.focus();
+    }
+
+    closeQuickImportModal() {
+      this.dom.quickImportModal.classList.remove('open');
+    }
+
+    parseMultiDayNotes(rawText, defaultYear) {
+      const lines = rawText.split('\n');
+      const results = {}; // dateKey -> { dateKey, displayDate, subjects: {}, notes: [], totalMs: 0 }
+      let currentDateKey = null;
+
+      for (let rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line) continue;
+
+        // Check for date line: "06/04", "07/04", "08/04/2026", "2026-04-06"
+        const dateMatch = line.match(/^(\d{1,2})[./\-](\d{1,2})(?:[./\-](\d{2,4}))?$/);
+        if (dateMatch) {
+          let d = parseInt(dateMatch[1], 10);
+          let m = parseInt(dateMatch[2], 10);
+          let y = dateMatch[3] ? parseInt(dateMatch[3], 10) : defaultYear;
+          if (y < 100) y += 2000;
+
+          let day = d;
+          let month = m;
+          if (this.dateFormat === 'MM/DD') {
+            day = m;
+            month = d;
+          }
+
+          const mm = String(month).padStart(2, '0');
+          const dd = String(day).padStart(2, '0');
+          currentDateKey = `${y}-${mm}-${dd}`;
+
+          if (!results[currentDateKey]) {
+            results[currentDateKey] = {
+              dateKey: currentDateKey,
+              displayDate: `${dd}/${mm}`,
+              subjects: {},
+              notes: [],
+              totalMs: 0
+            };
+          }
+          continue;
+        }
+
+        if (!currentDateKey) continue;
+
+        const dayObj = results[currentDateKey];
+        dayObj.notes.push(line);
+
+        const parsed = parseStudyLine(line, this.customSubjects);
+        if (parsed && parsed.durationMs > 0) {
+          const sub = parsed.subject || 'Overall Work';
+          dayObj.subjects[sub] = (dayObj.subjects[sub] || 0) + parsed.durationMs;
+          dayObj.totalMs += parsed.durationMs;
+        }
+      }
+
+      return results;
+    }
+
+    previewQuickImport() {
+      const text = this.dom.quickImportTextarea.value.trim();
+      if (!text) {
+        this.dom.importPreviewBox.innerHTML = '<span class="empty-subjects-hint">Please paste diary notes first.</span>';
+        this.dom.btnApplyImport.disabled = true;
+        return;
+      }
+
+      const year = parseInt(this.dom.importYearSelect.value, 10);
+      const parsedDays = this.parseMultiDayNotes(text, year);
+      const dayKeys = Object.keys(parsedDays).sort();
+
+      if (dayKeys.length === 0) {
+        this.dom.importPreviewBox.innerHTML = '<span class="empty-subjects-hint">No dates detected. Start entries with dates like "06/04" or "07/04".</span>';
+        this.dom.btnApplyImport.disabled = true;
+        return;
+      }
+
+      let totalDays = dayKeys.length;
+      let totalMs = 0;
+      let foundSubs = new Set();
+      let html = '';
+
+      for (const key of dayKeys) {
+        const item = parsedDays[key];
+        totalMs += item.totalMs;
+        const subsStr = Object.entries(item.subjects).map(([s, ms]) => {
+          foundSubs.add(s);
+          return `${s}: ${formatDurationFriendly(ms)}`;
+        }).join(', ');
+
+        const noteSnippet = item.notes.join(' | ');
+
+        html += `
+          <div class="import-preview-line">
+            <span><strong>${item.displayDate}</strong> (${key}): ${item.totalMs > 0 ? formatDurationFriendly(item.totalMs) : 'Rest / Notes'}</span>
+            <span>${subsStr || noteSnippet || 'No entries'}</span>
+          </div>
+        `;
+      }
+
+      this.dom.importPreviewBox.innerHTML = `
+        <div class="empty-subjects-hint">
+          ✓ Ready to import <strong>${totalDays} days</strong> (${formatDurationFriendly(totalMs)} total across ${foundSubs.size} subjects).
+        </div>
+        ${html}
+      `;
+
+      this.parsedImportCache = parsedDays;
+      this.dom.btnApplyImport.disabled = false;
+    }
+
+    applyQuickImport() {
+      if (!this.parsedImportCache || Object.keys(this.parsedImportCache).length === 0) {
+        this.showToast('Please preview notes before importing.');
+        return;
+      }
+
+      let totalDays = 0;
+      let totalMs = 0;
+      let earliestDate = null;
+
+      for (const [dateKey, item] of Object.entries(this.parsedImportCache)) {
+        if (!this.studyDiary[dateKey]) {
+          this.studyDiary[dateKey] = { totalMs: 0, subjects: {}, notes: '' };
+        }
+
+        // Merge subjects
+        for (const [sub, ms] of Object.entries(item.subjects)) {
+          this.addSubject(sub);
+          this.studyDiary[dateKey].subjects[sub] = (this.studyDiary[dateKey].subjects[sub] || 0) + ms;
+          totalMs += ms;
+        }
+
+        // Recalculate day total
+        let dayTotal = 0;
+        for (const ms of Object.values(this.studyDiary[dateKey].subjects)) {
+          dayTotal += ms;
+        }
+        this.studyDiary[dateKey].totalMs = dayTotal;
+
+        // Append notes if any
+        if (item.notes.length > 0) {
+          const notesText = item.notes.join('\n');
+          this.studyDiary[dateKey].notes = (this.studyDiary[dateKey].notes ? this.studyDiary[dateKey].notes + '\n' : '') + notesText;
+        }
+
+        totalDays++;
+
+        const curDate = new Date(dateKey + 'T00:00:00');
+        if (!earliestDate || curDate < earliestDate) {
+          earliestDate = curDate;
+        }
+      }
+
+      this.saveDiary();
+      this.saveSubjects();
+
+      if (earliestDate) {
+        this.viewingWeekStart = getWeekStart(earliestDate, this.weekStart);
+      }
+
+      this.renderDiaryView();
+      this.closeQuickImportModal();
+      this.showToast(`Imported ${totalDays} days of study diary (${formatDurationFriendly(totalMs)})! ✓`);
     }
 
     // --- Week Navigation ---
@@ -1487,6 +1807,15 @@
       this.dom.btnJumpToday.addEventListener('click', () => this.jumpToThisWeek());
       this.dom.btnCopyWeekDiary.addEventListener('click', () => this.copyWeekDiary());
       this.dom.btnExportWeekMd.addEventListener('click', () => this.exportWeekMarkdown());
+      this.dom.btnOpenQuickImport.addEventListener('click', () => this.openQuickImportModal());
+
+      // Quick Import Modal events
+      this.dom.quickImportCloseBtn.addEventListener('click', () => this.closeQuickImportModal());
+      this.dom.quickImportModal.addEventListener('click', (e) => {
+        if (e.target === this.dom.quickImportModal) this.closeQuickImportModal();
+      });
+      this.dom.btnPreviewImport.addEventListener('click', () => this.previewQuickImport());
+      this.dom.btnApplyImport.addEventListener('click', () => this.applyQuickImport());
 
       // Manual time modal
       this.dom.manualTimeCloseBtn.addEventListener('click', () => this.closeManualTimeModal());
@@ -1545,6 +1874,7 @@
           this.closeMemoryModal();
           this.closeManualTimeModal();
           this.closeSettingsModal();
+          this.closeQuickImportModal();
         }
       });
     }

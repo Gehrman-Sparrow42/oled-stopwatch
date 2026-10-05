@@ -1034,8 +1034,8 @@ body {
   resize: vertical;
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
-  user-select: text;
   -webkit-user-select: text;
+  user-select: text;
 }
 
 .notebook-textarea:focus {
@@ -1103,6 +1103,18 @@ body {
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9), 0 0 20px var(--accent-dim);
   transform: translateY(20px);
   transition: transform 0.2s ease;
+}
+
+.modal-card-sm {
+  max-width: 440px;
+}
+
+.modal-card-md {
+  max-width: 580px;
+}
+
+.modal-card-lg {
+  max-width: 680px;
 }
 
 .modal-backdrop.open .modal-card {
@@ -1432,6 +1444,98 @@ body {
   display: flex;
   gap: 0.5rem;
   margin-top: 0.25rem;
+}
+
+.modal-body-spacious {
+  gap: 1.25rem;
+}
+
+.btn-form-submit {
+  margin-top: 0.5rem;
+}
+
+.settings-input-flex {
+  flex: 1;
+}
+
+.btn-add-subject {
+  color: var(--accent-color);
+  border-color: var(--accent-border);
+}
+
+.modal-footer-hint {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.empty-subjects-hint {
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+}
+
+.btn-sync-notes {
+  color: var(--color-cyan);
+  border-color: rgba(0, 243, 255, 0.3);
+}
+
+.btn-sync-notes:hover {
+  border-color: var(--color-cyan);
+  box-shadow: 0 0 10px rgba(0, 243, 255, 0.2);
+}
+
+/* Quick Import Modal Styles */
+.quick-import-textarea {
+  width: 100%;
+  min-height: 220px;
+  background: var(--bg-pure);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.6;
+  padding: 0.85rem 1rem;
+  resize: vertical;
+  outline: none;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.quick-import-textarea:focus {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 12px var(--accent-dim);
+}
+
+.import-preview-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.import-preview-box strong {
+  color: var(--text-main);
+}
+
+.import-preview-line {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px dashed var(--border-subtle);
+  padding-bottom: 0.25rem;
+}
+
+.import-preview-line:last-child {
+  border-bottom: none;
 }
 
 /* Responsive queries */
