@@ -1015,6 +1015,34 @@ body {
   color: var(--text-main);
 }
 
+.badge-delete-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.72rem;
+  line-height: 1;
+  padding: 0 0.1rem;
+  margin-left: 0.15rem;
+  transition: color 0.15s ease, transform 0.1s ease;
+}
+
+.badge-delete-btn:hover {
+  color: var(--color-slowest);
+  transform: scale(1.2);
+}
+
+.btn-clear-day {
+  color: var(--color-slowest);
+  opacity: 0.7;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.btn-clear-day:hover {
+  opacity: 1;
+  color: var(--color-slowest);
+}
+
 /* Notebook Textarea (Authentic OLED Digital Notebook Page) */
 .notebook-textarea-wrap {
   position: relative;
@@ -1089,6 +1117,10 @@ body {
 .modal-backdrop.open {
   opacity: 1;
   pointer-events: auto;
+}
+
+.is-hidden {
+  display: none !important;
 }
 
 .modal-card {
@@ -1536,6 +1568,75 @@ body {
 
 .import-preview-line:last-child {
   border-bottom: none;
+}
+
+/* End Session / Review Modal */
+.session-summary-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 1.25rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.session-summary-time {
+  font-family: var(--font-mono);
+  font-size: 2.3rem;
+  font-weight: 800;
+  color: var(--accent-color);
+  text-shadow: 0 0 20px var(--accent-dim);
+}
+
+.session-summary-meta {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.session-summary-warning {
+  background: rgba(255, 68, 68, 0.1);
+  border: 1px solid rgba(255, 68, 68, 0.3);
+  color: var(--color-slowest);
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-family: var(--font-mono);
+  text-align: left;
+  line-height: 1.45;
+}
+
+.end-session-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-top: 0.5rem;
+}
+
+.btn-danger-outline {
+  background: transparent;
+  border: 1px solid rgba(255, 68, 68, 0.4);
+  color: var(--color-slowest);
+}
+
+.btn-danger-outline:hover {
+  border-color: var(--color-slowest);
+  background: rgba(255, 68, 68, 0.1);
+  box-shadow: 0 0 12px rgba(255, 68, 68, 0.2);
+}
+
+.btn-warning-outline {
+  background: transparent;
+  border: 1px solid rgba(255, 170, 0, 0.4);
+  color: var(--color-gold);
+}
+
+.btn-warning-outline:hover {
+  border-color: var(--color-gold);
+  background: rgba(255, 170, 0, 0.1);
+  box-shadow: 0 0 12px rgba(255, 170, 0, 0.2);
 }
 
 /* Responsive queries */

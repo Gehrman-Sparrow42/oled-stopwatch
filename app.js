@@ -234,6 +234,9 @@
       this.dateFormat = 'DD/MM'; // 'DD/MM' or 'MM/DD'
       this.intervalChimeMinutes = 0; // 0 = off
       this.lastChimeBucket = 0;
+      this.idleAlertMinutes = 120; // 0 = off, default 120m
+      this.confirmEndSession = 'always'; // 'always' or 'auto'
+      this.pendingEndSessionDuration = 0;
 
       // Diary State
       this.studyDiary = {};
@@ -327,6 +330,19 @@
         settingWeekStart: document.getElementById('settingWeekStart'),
         settingDateFormat: document.getElementById('settingDateFormat'),
         settingIntervalChime: document.getElementById('settingIntervalChime'),
+        settingIdleAlert: document.getElementById('settingIdleAlert'),
+        settingConfirmEndSession: document.getElementById('settingConfirmEndSession'),
+        // End Session Review Modal
+        endSessionModal: document.getElementById('endSessionModal'),
+        endSessionCloseBtn: document.getElementById('endSessionCloseBtn'),
+        reviewSessionDuration: document.getElementById('reviewSessionDuration'),
+        reviewSessionMeta: document.getElementById('reviewSessionMeta'),
+        reviewWarningBox: document.getElementById('reviewWarningBox'),
+        adjustTimeGroup: document.getElementById('adjustTimeGroup'),
+        adjustTimeInput: document.getElementById('adjustTimeInput'),
+        btnConfirmSaveSession: document.getElementById('btnConfirmSaveSession'),
+        btnToggleAdjustTime: document.getElementById('btnToggleAdjustTime'),
+        btnDiscardSession: document.getElementById('btnDiscardSession'),
         // Quick Import Modal
         quickImportModal: document.getElementById('quickImportModal'),
         quickImportCloseBtn: document.getElementById('quickImportCloseBtn'),
@@ -658,6 +674,20 @@
         if (this.dom.settingIntervalChime) {
           this.dom.settingIntervalChime.value = String(this.intervalChimeMinutes);
         }
+
+        // Idle / Forgot-to-Stop Alert
+        const savedIdle = parseInt(localStorage.getItem('chrono_focus_idle_alert') || '120', 10);
+        this.idleAlertMinutes = isNaN(savedIdle) ? 120 : savedIdle;
+        if (this.dom.settingIdleAlert) {
+          this.dom.settingIdleAlert.value = String(this.idleAlertMinutes);
+        }
+
+        // Confirm End Session
+        const savedConfirm = localStorage.getItem('chrono_focus_confirm_end_session') || 'always';
+        this.confirmEndSession = savedConfirm;
+        if (this.dom.settingConfirmEndSession) {
+          this.dom.settingConfirmEndSession.value = this.confirmEndSession;
+        }
       } catch (e) {
         console.warn('Failed to load settings', e);
       }
@@ -830,22 +860,87 @@
     }
 
     reset() {
+      this.triggerEndSession();
+    }
+
+    triggerEndSession() {
       const currentTotal = this.getElapsedTime();
       if (this.accumulatedTime === 0 && !this.running && this.laps.length === 0) return;
 
-      const currentBlockDuration = this.getCurrentLapTime();
+      // Pause timer while reviewing
+      if (this.running) {
+        this.toggleStartStop();
+      }
+
+      // If very short (< 15s) and no laps, reset immediately without dialog
+      if (currentTotal < 15000 && this.laps.length === 0) {
+        this.executeResetState();
+        this.showToast('Session reset.');
+        return;
+      }
+
+      if (this.confirmEndSession === 'auto') {
+        this.confirmAndSaveSession(currentTotal);
+        return;
+      }
+
+      this.openEndSessionModal(currentTotal);
+    }
+
+    openEndSessionModal(currentTotal) {
+      this.pendingEndSessionDuration = currentTotal;
+      const parts = this.formatTimeParts(currentTotal, this.precision);
+      this.dom.reviewSessionDuration.textContent = `${parts.mainStr}${parts.millisStr} (${formatDurationFriendly(currentTotal)})`;
+      this.dom.reviewSessionMeta.textContent = `${this.activeSubject} • ${this.laps.length > 0 ? this.laps.length : 1} block(s)`;
+
+      const isExcessive = (this.idleAlertMinutes > 0 && currentTotal > (this.idleAlertMinutes * 60 * 1000));
+      if (isExcessive) {
+        this.dom.reviewWarningBox.classList.remove('is-hidden');
+        this.dom.reviewWarningBox.innerHTML = `<span>⚠️ <strong>Forgot-to-Stop Alert:</strong> This timer has been active for <strong>${formatDurationFriendly(currentTotal)}</strong> (exceeding your ${this.idleAlertMinutes}m threshold). If you were away or forgot to stop it, adjust your actual study time below or discard it!</span>`;
+      } else {
+        this.dom.reviewWarningBox.classList.add('is-hidden');
+      }
+
+      this.dom.adjustTimeGroup.classList.add('is-hidden');
+      this.dom.adjustTimeInput.value = '';
+      this.dom.endSessionModal.classList.add('open');
+    }
+
+    closeEndSessionModal() {
+      this.dom.endSessionModal.classList.remove('open');
+    }
+
+    confirmAndSaveSession(customMs = null) {
+      let durationMs = (customMs !== null && customMs !== undefined) ? customMs : this.pendingEndSessionDuration;
+
+      // Check if user entered an adjusted time in the input box
+      if (this.dom.adjustTimeInput && this.dom.adjustTimeInput.value.trim()) {
+        const parsed = parseDurationString(this.dom.adjustTimeInput.value.trim());
+        if (parsed && parsed > 0) {
+          durationMs = parsed;
+        }
+      }
+
+      if (!durationMs || durationMs <= 0) {
+        this.discardCurrentSession();
+        return;
+      }
+
       const todayKey = formatDateKey(new Date());
+      this.logTimeToDiary(todayKey, this.activeSubject, durationMs);
+      this.archiveCurrentRun(false, durationMs);
+      this.executeResetState();
+      this.closeEndSessionModal();
+      this.showToast(`Saved ${formatDurationFriendly(durationMs)} (${this.activeSubject}) to today's diary! ✓`);
+    }
 
-      if (this.laps.length === 0 && currentTotal > 15000) {
-        this.logTimeToDiary(todayKey, this.activeSubject, currentTotal);
-      } else if (currentBlockDuration > 15000) {
-        this.logTimeToDiary(todayKey, this.activeSubject, currentBlockDuration);
-      }
+    discardCurrentSession() {
+      this.executeResetState();
+      this.closeEndSessionModal();
+      this.showToast('Session discarded. Today\'s diary untouched. ✓');
+    }
 
-      if (currentTotal > 3000 || this.laps.length > 0) {
-        this.archiveCurrentRun(false);
-      }
-
+    executeResetState() {
       this.running = false;
       this.stopEngine();
       this.startTime = 0;
@@ -861,11 +956,10 @@
       localStorage.removeItem('chrono_focus_active_session');
       this.dom.btnSaveSession.disabled = true;
       this.dom.btnStart.innerHTML = '<span class="ctrl-icon">▶</span> Start Study';
-      this.showToast('Study session ended & saved to today\'s notebook diary! ✓');
     }
 
-    archiveCurrentRun(notify = true) {
-      const totalTime = this.getElapsedTime();
+    archiveCurrentRun(notify = true, customDurationMs = null) {
+      const totalTime = (customDurationMs !== null) ? customDurationMs : this.getElapsedTime();
       if (totalTime < 500 && this.laps.length === 0) return;
 
       const session = {
@@ -885,6 +979,31 @@
       if (notify) {
         this.showToast('Study session archived! ✓');
       }
+    }
+
+    removeSubjectTimeFromDay(dayKey, subject) {
+      if (!this.studyDiary[dayKey] || !this.studyDiary[dayKey].subjects) return;
+
+      const removedMs = this.studyDiary[dayKey].subjects[subject] || 0;
+      delete this.studyDiary[dayKey].subjects[subject];
+
+      let newTotal = 0;
+      for (const ms of Object.values(this.studyDiary[dayKey].subjects)) {
+        newTotal += ms;
+      }
+      this.studyDiary[dayKey].totalMs = newTotal;
+      this.saveDiary();
+      this.renderDiaryView();
+      this.showToast(`Removed ${subject} (${formatDurationFriendly(removedMs)}) from day. ✓`);
+    }
+
+    clearDayStudyTime(dayKey) {
+      if (!this.studyDiary[dayKey]) return;
+      this.studyDiary[dayKey].subjects = {};
+      this.studyDiary[dayKey].totalMs = 0;
+      this.saveDiary();
+      this.renderDiaryView();
+      this.showToast('All study hours cleared for day. ✓');
     }
 
     render() {
@@ -995,12 +1114,17 @@
           }
         }
 
-        // Subjects badges HTML
+        // Subjects badges HTML with individual delete button
         let subjectsHtml = '';
         if (dayEntry.subjects && Object.keys(dayEntry.subjects).length > 0) {
           for (const [sub, ms] of Object.entries(dayEntry.subjects)) {
             if (ms > 0) {
-              subjectsHtml += `<span class="subject-badge">${sub}: <strong>${formatDurationFriendly(ms)}</strong></span>`;
+              subjectsHtml += `
+                <span class="subject-badge" title="Logged under ${sub}">
+                  <span>${sub}: <strong>${formatDurationFriendly(ms)}</strong></span>
+                  <button class="badge-delete-btn" data-daykey="${dayKey}" data-subject="${sub}" title="Delete ${sub} hours from this day">✕</button>
+                </span>
+              `;
             }
           }
         } else {
@@ -1023,6 +1147,7 @@
               </div>
               <div class="day-totals-wrap">
                 <span class="day-time-badge">${formatDurationFriendly(dayTotalMs)}</span>
+                ${dayTotalMs > 0 ? `<button class="btn-tiny btn-clear-day" data-daykey="${dayKey}" data-daylabel="${dayName} (${dayDisplay})" title="Clear all study hours for this day">✕ Clear</button>` : ''}
                 <button class="btn-tiny btn-open-manual-time" data-daykey="${dayKey}" data-daylabel="${dayName} (${dayDisplay})" title="Add offline study hours">
                   + Add Time
                 </button>
@@ -1130,6 +1255,28 @@
         btn.addEventListener('click', (e) => {
           const key = e.currentTarget.dataset.daykey;
           this.syncNotesForDay(key);
+        });
+      });
+
+      // Bind Delete Subject Time Button
+      this.dom.notebookDaysList.querySelectorAll('.badge-delete-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const key = e.currentTarget.dataset.daykey;
+          const sub = e.currentTarget.dataset.subject;
+          this.removeSubjectTimeFromDay(key, sub);
+        });
+      });
+
+      // Bind Clear Day Time Button
+      this.dom.notebookDaysList.querySelectorAll('.btn-clear-day').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const key = e.currentTarget.dataset.daykey;
+          const label = e.currentTarget.dataset.daylabel;
+          if (confirm(`Clear all logged study hours for ${label}?`)) {
+            this.clearDayStudyTime(key);
+          }
         });
       });
 
@@ -1794,6 +1941,33 @@
         }
       });
 
+      this.dom.settingIdleAlert.addEventListener('change', (e) => {
+        this.idleAlertMinutes = parseInt(e.target.value, 10);
+        localStorage.setItem('chrono_focus_idle_alert', String(this.idleAlertMinutes));
+        this.showToast(this.idleAlertMinutes > 0 ? `Forgot-to-stop alert set to ${this.idleAlertMinutes}m.` : 'Idle alert disabled.');
+      });
+
+      this.dom.settingConfirmEndSession.addEventListener('change', (e) => {
+        this.confirmEndSession = e.target.value;
+        localStorage.setItem('chrono_focus_confirm_end', this.confirmEndSession);
+        this.showToast(this.confirmEndSession === 'always' ? 'Always review sessions before logging.' : 'Sessions under idle limit auto-save on reset.');
+      });
+
+      // End Session Review Modal events
+      this.dom.endSessionCloseBtn.addEventListener('click', () => this.closeEndSessionModal());
+      this.dom.endSessionModal.addEventListener('click', (e) => {
+        if (e.target === this.dom.endSessionModal) this.closeEndSessionModal();
+      });
+      this.dom.btnConfirmSaveSession.addEventListener('click', () => this.confirmAndSaveSession());
+      this.dom.btnToggleAdjustTime.addEventListener('click', () => {
+        const isHidden = this.dom.adjustTimeGroup.classList.contains('is-hidden');
+        this.dom.adjustTimeGroup.classList.toggle('is-hidden', !isHidden);
+        if (!this.dom.adjustTimeGroup.classList.contains('is-hidden')) {
+          this.dom.adjustTimeInput.focus();
+        }
+      });
+      this.dom.btnDiscardSession.addEventListener('click', () => this.discardCurrentSession());
+
       this.dom.btnClearAllHistory.addEventListener('click', () => this.clearAllHistory());
       this.dom.btnExportJson.addEventListener('click', () => this.exportHistoryJson());
 
@@ -1875,6 +2049,7 @@
           this.closeManualTimeModal();
           this.closeSettingsModal();
           this.closeQuickImportModal();
+          this.closeEndSessionModal();
         }
       });
     }

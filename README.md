@@ -56,7 +56,15 @@ CHRONO FOCUS treats this shorthand as a first-class citizen:
 - Auto-saves every keystroke continuously to `localStorage` with a subtle visual indicator.
 - **`+ Stamp Hours`**: One-click stamps a clean summary of that day's studied subjects directly into your diary notes.
 
-### 3. Weekly Summary & Export
+### 3. Forgot-to-Stop Protection & Flexible Session Editing
+- **End-of-Session Review Modal**: Pressing <kbd>R</kbd> or clicking **End Session** brings up an explicit review dialog:
+  - **`✓ Save to Today's Diary`**: Confirms and logs the session to today's notebook.
+  - **`✏️ Adjust Time`**: If you stepped away or left the timer running too long, quickly adjust the actual focus time (e.g., enter `45m`, `1.5h`, or `70 dk`) before saving.
+  - **`✕ Discard Session`**: Completely discards the timer session. Today's notebook and diary remain untouched.
+- **Forgot-to-Stop Idle Warning**: Configure an idle threshold (60m, 90m, 120m, 180m, 240m) in Preferences. If the timer exceeds this duration, the review modal displays a prominent warning prompt to prevent accidental over-counting.
+- **One-Click Subject & Day Deletion**: Every subject pill in the Weekly Notebook cards has an instant `✕` delete button. Hover or tap to remove any accidentally logged subject time, with dynamic recalculation of total hours. Each day also includes a `✕ Clear` button to reset hours if needed.
+
+### 4. Weekly Summary & Export
 - Live ribbon summarizing **Total Focus Hours**, **Daily Average**, and **Top Studied Subject**.
 - **`📋 Copy Diary`**: One-click copies the full formatted week to clipboard for archiving or sending.
 - **`↓ Export .md`**: Downloads a clean Markdown file formatted for Obsidian, Notion, or personal logs.
@@ -81,6 +89,8 @@ CHRONO FOCUS treats this shorthand as a first-class citizen:
 | **Daily Study Goal** | Select daily target from `1h` to `10h/day` (default `4h`). |
 | **Week Starts On** | `Monday (Monday - Sunday)` or `Sunday (Sunday - Saturday)`. |
 | **Date Display Format** | `DD/MM` (e.g. `06/04`) or `MM/DD` (e.g. `04/06`). |
+| **Forgot-to-Stop Alert** | `Off`, `60m`, `90m`, `120m (Default)`, `180m`, or `240m`. |
+| **End Session Behavior** | `Always Review & Confirm` (Default) or `Auto-Save Instantly`. |
 | **Periodic Focus Chimes** | `Off`, `25m (Pomodoro)`, `30m`, `45m`, `50m`, or `60m`. |
 | **Theme Accents** | Emerald Cyan, Cyber Blue, Solar Gold, Crimson, Obsidian Mono. |
 | **Timer Precision** | `1/100s` (<kbd>2</kbd>) or `1/1000s` (<kbd>3</kbd>). |

@@ -409,11 +409,79 @@
             </select>
           </div>
         </div>
+
+        <!-- Forgot to Stop / Idle Protection -->
+        <div class="settings-section">
+          <div class="settings-section-title">Forgot-to-Stop &amp; Idle Protection</div>
+          <div class="settings-field">
+            <label class="settings-label" for="settingIdleAlert">Forgot-to-Stop Alert Threshold</label>
+            <select id="settingIdleAlert" class="settings-select">
+              <option value="0">Off (No Warning)</option>
+              <option value="60">After 60 Minutes (1 Hour)</option>
+              <option value="90">After 90 Minutes (1.5 Hours)</option>
+              <option value="120" selected>After 120 Minutes (2 Hours)</option>
+              <option value="180">After 180 Minutes (3 Hours)</option>
+              <option value="240">After 240 Minutes (4 Hours)</option>
+            </select>
+          </div>
+          <div class="settings-field">
+            <label class="settings-label" for="settingConfirmEndSession">End Session Confirmation</label>
+            <select id="settingConfirmEndSession" class="settings-select">
+              <option value="always" selected>Always Ask (Review before saving)</option>
+              <option value="auto">Auto-Save directly without prompt</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       <div class="modal-footer">
         <span class="modal-footer-hint">Changes save automatically</span>
         <button class="btn-small" id="settingsDoneBtn">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- End Session Review Modal -->
+  <div class="modal-backdrop" id="endSessionModal" role="dialog" aria-modal="true" aria-labelledby="endSessionTitle">
+    <div class="modal-card modal-card-md">
+      <div class="modal-header">
+        <div class="modal-title" id="endSessionTitle">
+          <span>✓ Session Finished</span>
+        </div>
+        <button class="modal-close-btn" id="endSessionCloseBtn" aria-label="Close Modal">✕</button>
+      </div>
+
+      <div class="modal-body modal-body-spacious">
+        <div class="session-summary-box">
+          <div class="session-summary-time" id="reviewSessionDuration">00:00.00</div>
+          <div class="session-summary-meta" id="reviewSessionMeta">Overall Work • 0 study blocks</div>
+        </div>
+
+        <div id="reviewWarningBox" class="session-summary-warning is-hidden">
+          <span>⚠️ <strong>Notice:</strong> This session ran for an extended period. If you forgot to stop the timer while away, you can adjust the hours below or discard it completely!</span>
+        </div>
+
+        <div class="form-group is-hidden" id="adjustTimeGroup">
+          <label class="form-label" for="adjustTimeInput">Adjusted Study Time (Minutes or Hours)</label>
+          <input type="text" id="adjustTimeInput" class="form-input" placeholder="e.g. 60 dk, 45m, 1.5h">
+          <span class="modal-footer-hint">Enter the actual time you studied</span>
+        </div>
+
+        <div class="end-session-actions">
+          <button class="btn-ctrl btn-primary-toggle" id="btnConfirmSaveSession">
+            ✓ Save to Today's Diary
+          </button>
+          <button class="btn-small btn-warning-outline" id="btnToggleAdjustTime">
+            ✏️ Adjust Time (I forgot to stop timer)
+          </button>
+          <button class="btn-small btn-danger-outline" id="btnDiscardSession">
+            ✕ Discard Session (Don't Save)
+          </button>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <span class="modal-footer-hint">Discarding leaves today's diary untouched.</span>
       </div>
     </div>
   </div>
