@@ -13,7 +13,7 @@
 ## 🌟 Highlights
 
 - **Pitch-Black OLED Interface (`#000000`)**: Designed specifically for late-night focus sessions with zero eye strain and maximal battery savings on OLED / AMOLED displays.
-- **Physical-Notebook Study Diary**: Emulates the natural habit of keeping a physical paper notebook diary with chronological 7-day pages (`Mon` through `Sun`), day-by-day notes, and subject breakdowns.
+- **Physical-Notebook Study Diary**: Emulates the natural habit of keeping a physical paper notebook diary with chronological 7-day pages (`Monday` through `Sunday`), day-by-day notes, and subject breakdowns.
 - **Smart Note Parser & Quick-Paste**: Write or paste natural shorthand notes like `120 dk diff`, `70 dk molbio`, or `40 dk molbio diff eq tekrar` and have the app automatically parse minutes, register subjects, and log daily hours!
 - **Dynamic Subject Manager**: You are never locked into predefined subjects. Add, rename, or delete subjects (`diff`, `molbio`, `mass`, `biomaterial`, `coding`, `reading`, etc.) on the fly with a single click.
 - **Customizable Daily Study Goals**: Set your daily focus target (1h to 10h/day). Every day card features a live dynamic progress bar visualizing your progress.
@@ -50,7 +50,7 @@ CHRONO FOCUS treats this shorthand as a first-class citizen:
 - **`+ Add Time` Modal**: Supports offline study logging with flexible natural inputs (`120 dk`, `90m`, `1.5h`, or quick shorthand `120 dk diff`).
 
 ### 2. 7-Day Chronological Weekly Layout
-- Displays your full week (`Mon` to `Sun` or `Sun` to `Sat`).
+- Displays your full week (`Monday` to `Sunday` or `Sunday` to `Saturday`).
 - Highlights **TODAY** with a glowing cyan OLED badge.
 - Navigate across weeks with `← Prev Week` and `Next Week →`, or jump instantly to current week with `Today`.
 - Auto-saves every keystroke continuously to `localStorage` with a subtle visual indicator.
@@ -79,7 +79,7 @@ CHRONO FOCUS treats this shorthand as a first-class citizen:
 | :--- | :--- |
 | **Manage Subjects** | Create any custom subject chip; delete any subject with `✕`. |
 | **Daily Study Goal** | Select daily target from `1h` to `10h/day` (default `4h`). |
-| **Week Starts On** | `Monday (Mon - Sun)` or `Sunday (Sun - Sat)`. |
+| **Week Starts On** | `Monday (Monday - Sunday)` or `Sunday (Sunday - Saturday)`. |
 | **Date Display Format** | `DD/MM` (e.g. `06/04`) or `MM/DD` (e.g. `04/06`). |
 | **Periodic Focus Chimes** | `Off`, `25m (Pomodoro)`, `30m`, `45m`, `50m`, or `60m`. |
 | **Theme Accents** | Emerald Cyan, Cyber Blue, Solar Gold, Crimson, Obsidian Mono. |

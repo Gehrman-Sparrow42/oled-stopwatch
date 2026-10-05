@@ -966,8 +966,8 @@
       this.dom.weekRangeTitle.textContent = `Week of ${startStr} - ${endStr}`;
 
       const dayNames = this.weekStart === 'sunday'
-        ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thur', 'Fri', 'Sat']
-        : ['Mon', 'Tue', 'Wed', 'Thur', 'Fri', 'Sat', 'Sun'];
+        ? ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+        : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
       const todayKey = formatDateKey(new Date());
       const dailyGoalMs = this.dailyGoalHours * 3600 * 1000;
@@ -1419,8 +1419,8 @@
     copyWeekDiary() {
       const weekStart = new Date(this.viewingWeekStart);
       const dayNames = this.weekStart === 'sunday'
-        ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thur', 'Fri', 'Sat']
-        : ['Mon', 'Tue', 'Wed', 'Thur', 'Fri', 'Sat', 'Sun'];
+        ? ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+        : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
       let text = `====================================================\n`;
       text += `STUDY DIARY - WEEK OF ${formatDisplayDate(weekStart, this.dateFormat)}\n`;
@@ -1460,8 +1460,8 @@
     exportWeekMarkdown() {
       const weekStart = new Date(this.viewingWeekStart);
       const dayNames = this.weekStart === 'sunday'
-        ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thur', 'Fri', 'Sat']
-        : ['Mon', 'Tue', 'Wed', 'Thur', 'Fri', 'Sat', 'Sun'];
+        ? ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+        : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
       let md = `# Study Diary - Week of ${formatDisplayDate(weekStart, this.dateFormat)}\n\n`;
       md += `*Daily Focus Goal: ${this.dailyGoalHours} hours*\n\n`;
