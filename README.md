@@ -1,49 +1,62 @@
-# CHRONO FOCUS - OLED Study & Productivity Timer
+# CHRONO FOCUS - OLED Study Timer & Weekly Notebook Diary
 
-A standalone, true OLED-black (`#000000`) timer engineered specifically for deep work, study sessions, and focus intervals. Built with zero-drift background tracking, study block logging, and persistent session memory.
-
----
-
-## Study-Centric Features
-
-- **True Pitch Black OLED Design**: Pure `#000000` background ensures zero eye strain during late-night study sessions and saves power on OLED/AMOLED screens.
-- **Continuous Background Operation (Tab Minimization & Sleep Proof)**:
-  - **Zero-drift arithmetic**: Calculates elapsed time using monotonic wall-clock delta offsets (`Date.now()`), so time never freezes or drifts when the tab is backgrounded or your laptop sleeps.
-  - **Dedicated Web Worker**: Runs a background clock thread so title notifications and intervals keep ticking without main-thread browser throttling.
-  - **Live Tab Study Clock**: Displays active study time directly on your browser tab (e.g. `⏱ 45:12.00 - CHRONO FOCUS`), letting you keep track of your study session while reading in other tabs.
-- **Study Block & Interval Tracking**:
-  - Log study blocks (chapters, topics, Pomodoro intervals, problem sets) with split durations and cumulative study time.
-  - Live session metrics:
-    - **Total Study Time**: Overall time spent studying in the active session.
-    - **Active Block**: Live timer for your current study block.
-    - **Average Block**: Average duration of your study blocks.
-    - **Blocks Logged**: Total study intervals completed.
-- **Persistent Study Memory & Daily Log**:
-  - Automatically preserves active study sessions across page refreshes and browser restarts.
-  - Ending a study session archives it to the **Study Log & History Drawer** with date, time, total focus time, and completed blocks.
-  - Quick export options: Copy formatted study log to clipboard, download CSV, or backup all study history as JSON.
-- **OLED Ambient Color Themes**:
-  - Matrix Emerald, Cyber Cyan, Solar Amber, Pure Ghost White, Crimson Red, and Neon Violet.
-- **Subtle Audio Cues**:
-  - Toggleable soft audio chimes on Study Start, Break/Pause, Next Block, and Session End.
+A zero-distraction, true OLED-black (`#000000`) study companion combining a high-precision study timer with a **Weekly Study Notebook & Diary** inspired by physical paper note-taking.
 
 ---
 
-## Keyboard Shortcuts
+## 📓 Weekly Study Notebook & Diary
+
+Designed specifically for students and knowledge workers who love keeping a daily study diary in their physical notebooks:
+
+- **Weekly 7-Day Pages (Mon - Sun)**:
+  - Organizes your week chronologically:
+    `Mon (05/10)`, `Tue (06/10)`, `Wed (07/10)`, `Thur (08/10)`, `Fri (09/10)`, `Sat (10/10)`, `Sun (11/10)`.
+  - Automatically highlights **TODAY** with a glowing OLED badge.
+  - Navigate effortlessly across past and future weeks with `← Prev Week` and `Next Week →`.
+- **Subject-Specific Study Hours**:
+  - Automatically logs study time under chosen subjects (e.g. `Math: 2h 15m`, `Coding: 3h 40m`, `Reading: 1h`, `Overall Work`).
+  - Total daily hours are calculated and displayed on each day's header.
+  - **`+ Add Time`**: Easily log offline study or reading hours away from the computer.
+- **Digital OLED Notebook Notes**:
+  - Write notes, chapters covered, problem sets solved, or reflections for every day of the week.
+  - **Auto-Saves Continuously**: Every keystroke is saved directly into `localStorage`.
+  - **`+ Stamp Hours`**: One-click stamps a clean summary of that day's studied subjects directly into your diary notes.
+- **Weekly Summary & Export**:
+  - Displays total week focus time, daily average, and top studied subject.
+  - **`📋 Copy Diary`**: Copies the entire week's notes and study hours to clipboard.
+  - **`↓ Export .md`**: Exports a clean Markdown notebook file.
+
+---
+
+## ⏱ Live Study Timer
+
+- **Active Subject / Task Selector**:
+  - Switch between subjects on the fly (`Math`, `Coding`, `Reading`, `Overall Work`, or custom).
+  - Time is automatically credited to the selected subject in your notebook diary.
+- **True OLED Pitch Black (`#000000`)**:
+  - Zero eye strain during late-night study sessions; saves battery on OLED/AMOLED screens.
+- **Continuous Background Operation**:
+  - Monotonic wall-clock arithmetic (`Date.now()`) with an inline Web Worker ticker ensures 100% accuracy when tabs are minimized or laptop sleeps.
+  - Shows live time directly on the browser tab title: `⏱ 45:12.00 - [Math] CHRONO FOCUS`.
+
+---
+
+## ⌨️ Keyboard Shortcuts
 
 | Shortcut | Action |
 | :--- | :--- |
 | <kbd>Space</kbd> | Start Study / Take Break |
 | <kbd>L</kbd> or <kbd>B</kbd> | Log Next Study Block / Topic Split |
-| <kbd>R</kbd> | End Session (Auto-Archives to Study Log) |
-| <kbd>M</kbd> or <kbd>H</kbd> | Open / Close Study History Drawer |
-| <kbd>S</kbd> | Toggle Audio Cues |
+| <kbd>R</kbd> | End Session (Saves to Today's Notebook) |
+| <kbd>N</kbd> | Switch between **Live Timer** and **Weekly Notebook** |
+| <kbd>M</kbd> | Open Past Sessions Archive |
+| <kbd>S</kbd> | Toggle Soft Audio Cues |
 | <kbd>F</kbd> | Toggle Fullscreen OLED Focus Mode |
-| <kbd>2</kbd> / <kbd>3</kbd> | Switch Precision between 2 and 3 decimal places |
+| <kbd>2</kbd> / <kbd>3</kbd> | Toggle Precision (1/100s or 1/1000s) |
 
 ---
 
-## How to Use
+## 🚀 How to Launch
 
-- **Standalone File**: Double-click [index.html](file:///c:/Tools/oled-stopwatch/index.html) in any web browser. Completely offline, zero install.
+- **Direct Browser File**: Double-click [index.html](file:///c:/Tools/oled-stopwatch/index.html) in your browser. Completely self-contained and offline-ready.
 - **Launcher**: Run [Launch_OLED_Stopwatch.bat](file:///c:/Tools/LAUNCHERS/Launch_OLED_Stopwatch.bat) from `C:\Tools\LAUNCHERS\`.

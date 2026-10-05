@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CHRONO OLED - Study & Focus Timer</title>
-  <meta name="description" content="Self-contained true OLED black study timer with zero-drift background worker, study block tracking, and persistent session memory.">
+  <title>CHRONO FOCUS - OLED Study Timer & Weekly Notebook Diary</title>
+  <meta name="description" content="True OLED black study timer and weekly notebook diary for tracking daily focus hours by subject with persistent memory.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -27,7 +27,7 @@
 
       <div class="header-actions">
         <!-- OLED Color Accent Picker -->
-        <div class="theme-picker-group" title="Select OLED Focus Ambient Color" role="radiogroup" aria-label="Color Palette">
+        <div class="theme-picker-group" title="Select OLED Ambient Color" role="radiogroup" aria-label="Color Palette">
           <div class="theme-dot selected" data-pick="emerald" title="Matrix Emerald" role="radio" aria-checked="true" tabindex="0"></div>
           <div class="theme-dot" data-pick="cyan" title="Cyber Cyan" role="radio" aria-checked="false" tabindex="0"></div>
           <div class="theme-dot" data-pick="amber" title="Solar Amber" role="radio" aria-checked="false" tabindex="0"></div>
@@ -46,141 +46,261 @@
           ⛶
         </button>
 
-        <!-- Memory / Study History Drawer -->
-        <button class="icon-btn" id="historyToggleBtn" title="Study Log & Memory (M)" aria-label="View Saved Sessions">
+        <!-- Past Sessions Archive Drawer -->
+        <button class="icon-btn" id="historyToggleBtn" title="Session Archive Drawer (M)" aria-label="View Session Archive">
           🗂
         </button>
       </div>
     </header>
 
-    <!-- Status & Precision Bar -->
-    <section class="status-bar" aria-label="Status Bar">
-      <div class="pulse-indicator">
-        <span class="pulse-dot" id="pulseDot" aria-hidden="true"></span>
-        <span id="statusPill">READY TO STUDY</span>
-      </div>
-
-      <div class="precision-toggle" role="group" aria-label="Timer Precision">
-        <button class="precision-btn active" data-prec="2" title="Hundredths of a second (1/100s)">.00s</button>
-        <button class="precision-btn" data-prec="3" title="Milliseconds (1/1000s)">.000s</button>
-      </div>
-    </section>
-
-    <!-- Main OLED Hero Timer Display -->
-    <section class="timer-hero" id="timerHero" aria-live="off">
-      <!-- Active Study Block Live Pill -->
-      <div class="current-lap-preview" id="currentLapPreview">
-        <span class="lap-pill" id="currentLapNumber">Block 1</span>
-        <span id="currentLapVal">00:00.00</span>
-      </div>
-
-      <!-- Massive Digital Digits -->
-      <div class="digits-container" aria-label="Study Time">
-        <span class="primary-time" id="primaryTime">00:00</span>
-        <span class="millis-time" id="millisTime">.00</span>
-      </div>
-
-      <!-- OLED Activity Visualizer -->
-      <div class="audio-visualizer" aria-hidden="true">
-        <div class="wave-bar"></div>
-        <div class="wave-bar"></div>
-        <div class="wave-bar"></div>
-        <div class="wave-bar"></div>
-        <div class="wave-bar"></div>
-      </div>
-    </section>
-
-    <!-- Primary Action Controls -->
-    <section class="controls-grid" aria-label="Study Controls">
-      <button class="btn-ctrl btn-primary-toggle" id="btnStart" aria-label="Start Study or Take Break">
-        <span class="ctrl-icon">▶</span> Start Study
+    <!-- Top View Switcher Tabs -->
+    <nav class="view-nav-tabs" role="tablist" aria-label="View Switcher">
+      <button class="nav-tab active" id="tabTimer" role="tab" aria-selected="true" aria-controls="viewTimer">
+        ⏱ Live Study Timer
       </button>
-
-      <button class="btn-ctrl btn-lap" id="btnLap" disabled aria-label="Log Study Block or Split Interval">
-        <span class="ctrl-icon">✦</span> Next Block
+      <button class="nav-tab" id="tabDiary" role="tab" aria-selected="false" aria-controls="viewDiary">
+        📓 Weekly Study Notebook
+        <span class="diary-date-badge" id="navDateBadge">05/10</span>
       </button>
+    </nav>
 
-      <button class="btn-ctrl btn-reset" id="btnReset" aria-label="Finish and Save Study Session">
-        <span class="ctrl-icon">✓</span> End Session
-      </button>
-    </section>
+    <!-- ====================================================================
+         VIEW 1: LIVE STUDY TIMER
+         ==================================================================== -->
+    <div id="viewTimer" class="view-panel active" role="tabpanel" aria-labelledby="tabTimer">
 
-    <!-- Keyboard Shortcuts Guide -->
-    <div class="shortcuts-hint" aria-hidden="true">
-      <span><span class="kbd">Space</span> Start / Break</span>
-      <span><span class="kbd">L</span> Next Block</span>
-      <span><span class="kbd">R</span> End Session</span>
-      <span><span class="kbd">M</span> Study Log</span>
-      <span><span class="kbd">F</span> Fullscreen Focus</span>
+      <!-- Active Subject / Task Selector Bar -->
+      <section class="subject-picker-card" aria-label="Focus Subject">
+        <div class="subject-header">
+          <span class="subject-title">Active Subject / Task:</span>
+          <span class="subject-hint">Time logs directly to today's notebook</span>
+        </div>
+        <div class="subject-controls">
+          <input type="text" id="activeSubjectInput" class="subject-input" placeholder="e.g. Math, Coding, Reading, Overall..." value="Overall Work" list="presetSubjects">
+          <datalist id="presetSubjects">
+            <option value="Overall Work">
+            <option value="Math">
+            <option value="Coding">
+            <option value="Reading">
+            <option value="Physics">
+            <option value="Problem Set">
+          </datalist>
+          <div class="quick-chips" id="quickSubjectChips">
+            <button type="button" class="chip active" data-name="Overall Work">Overall</button>
+            <button type="button" class="chip" data-name="Math">Math</button>
+            <button type="button" class="chip" data-name="Coding">Coding</button>
+            <button type="button" class="chip" data-name="Reading">Reading</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Status & Precision Bar -->
+      <section class="status-bar" aria-label="Status Bar">
+        <div class="pulse-indicator">
+          <span class="pulse-dot" id="pulseDot" aria-hidden="true"></span>
+          <span id="statusPill">READY TO STUDY</span>
+        </div>
+
+        <div class="precision-toggle" role="group" aria-label="Timer Precision">
+          <button class="precision-btn active" data-prec="2" title="Hundredths of a second (1/100s)">.00s</button>
+          <button class="precision-btn" data-prec="3" title="Milliseconds (1/1000s)">.000s</button>
+        </div>
+      </section>
+
+      <!-- Main OLED Hero Timer Display -->
+      <section class="timer-hero" id="timerHero" aria-live="off">
+        <!-- Active Study Block Live Pill -->
+        <div class="current-lap-preview" id="currentLapPreview">
+          <span class="lap-pill" id="currentLapNumber">Block 1</span>
+          <span id="currentLapVal">00:00.00</span>
+        </div>
+
+        <!-- Massive Digital Digits -->
+        <div class="digits-container" aria-label="Study Time">
+          <span class="primary-time" id="primaryTime">00:00</span>
+          <span class="millis-time" id="millisTime">.00</span>
+        </div>
+
+        <!-- OLED Activity Visualizer -->
+        <div class="audio-visualizer" aria-hidden="true">
+          <div class="wave-bar"></div>
+          <div class="wave-bar"></div>
+          <div class="wave-bar"></div>
+          <div class="wave-bar"></div>
+          <div class="wave-bar"></div>
+        </div>
+      </section>
+
+      <!-- Primary Action Controls -->
+      <section class="controls-grid" aria-label="Study Controls">
+        <button class="btn-ctrl btn-primary-toggle" id="btnStart" aria-label="Start Study or Take Break">
+          <span class="ctrl-icon">▶</span> Start Study
+        </button>
+
+        <button class="btn-ctrl btn-lap" id="btnLap" disabled aria-label="Log Study Block or Split Interval">
+          <span class="ctrl-icon">✦</span> Next Block
+        </button>
+
+        <button class="btn-ctrl btn-reset" id="btnReset" aria-label="Finish and Save Study Session">
+          <span class="ctrl-icon">✓</span> End Session
+        </button>
+      </section>
+
+      <!-- Keyboard Shortcuts Guide -->
+      <div class="shortcuts-hint" aria-hidden="true">
+        <span><span class="kbd">Space</span> Start / Break</span>
+        <span><span class="kbd">L</span> Next Block</span>
+        <span><span class="kbd">R</span> End Session</span>
+        <span><span class="kbd">N</span> Open Notebook</span>
+        <span><span class="kbd">F</span> Fullscreen Focus</span>
+      </div>
+
+      <!-- Live Performance Metrics Summary -->
+      <section class="stats-summary-card" aria-label="Study Session Metrics">
+        <div class="stat-item">
+          <span class="stat-label">Total Study Time</span>
+          <span class="stat-val highlight" id="statTotalStudy">00:00.00</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Active Block</span>
+          <span class="stat-val" id="statCurrentBlock">--:--.--</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Average Block</span>
+          <span class="stat-val" id="statAvgBlock">--:--.--</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Blocks Logged</span>
+          <span class="stat-val" id="statTotalBlocks">0</span>
+        </div>
+      </section>
+
+      <!-- Study Blocks & Intervals Table -->
+      <section class="laps-section" aria-label="Study Blocks Log">
+        <div class="laps-header-bar">
+          <div class="laps-title">
+            <span>Study Blocks & Intervals</span>
+            <span class="laps-count-badge" id="lapsCountBadge">0</span>
+          </div>
+          <div class="laps-actions">
+            <button class="btn-small" id="btnSaveSession" disabled title="Archive this study session into memory">
+              💾 Archive Session
+            </button>
+            <button class="btn-small" id="btnCopyLaps" disabled title="Copy study blocks to clipboard">
+              📋 Copy Log
+            </button>
+            <button class="btn-small" id="btnExportCsv" disabled title="Download study log as CSV">
+              ↓ CSV
+            </button>
+          </div>
+        </div>
+
+        <div class="laps-table-container">
+          <table class="laps-table" aria-label="Study Blocks Table">
+            <thead>
+              <tr>
+                <th scope="col">Block</th>
+                <th scope="col">Block Duration</th>
+                <th scope="col">Cumulative Study Time</th>
+                <th scope="col">Time Logged</th>
+              </tr>
+            </thead>
+            <tbody id="lapsTableBody">
+              <tr>
+                <td colspan="4" class="empty-laps">No study blocks logged yet. Press "Next Block" (or tap 'L') as you finish chapters or topics.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
     </div>
 
-    <!-- Study Metrics Summary Card (Study-Tailored) -->
-    <section class="stats-summary-card" aria-label="Study Session Metrics">
-      <div class="stat-item">
-        <span class="stat-label">Total Study Time</span>
-        <span class="stat-val highlight" id="statTotalStudy">00:00.00</span>
-      </div>
-      <div class="stat-item">
-        <span class="stat-label">Active Block</span>
-        <span class="stat-val" id="statCurrentBlock">--:--.--</span>
-      </div>
-      <div class="stat-item">
-        <span class="stat-label">Average Block</span>
-        <span class="stat-val" id="statAvgBlock">--:--.--</span>
-      </div>
-      <div class="stat-item">
-        <span class="stat-label">Blocks Logged</span>
-        <span class="stat-val" id="statTotalBlocks">0</span>
-      </div>
-    </section>
+    <!-- ====================================================================
+         VIEW 2: WEEKLY STUDY NOTEBOOK & DIARY
+         ==================================================================== -->
+    <div id="viewDiary" class="view-panel" role="tabpanel" aria-labelledby="tabDiary">
 
-    <!-- Study Blocks & Intervals Table -->
-    <section class="laps-section" aria-label="Study Blocks Log">
-      <div class="laps-header-bar">
-        <div class="laps-title">
-          <span>Study Blocks & Intervals</span>
-          <span class="laps-count-badge" id="lapsCountBadge">0</span>
+      <!-- Week Navigation Bar -->
+      <section class="week-nav-bar" aria-label="Week Navigation">
+        <button class="btn-small" id="btnPrevWeek" title="Previous Week">← Prev Week</button>
+        <div class="week-title-wrap">
+          <span class="week-title" id="weekRangeTitle">Week of 05/10 - 11/10</span>
+          <button class="btn-tiny" id="btnJumpToday">Today</button>
         </div>
-        <div class="laps-actions">
-          <button class="btn-small" id="btnSaveSession" disabled title="Archive this study session into memory">
-            💾 Archive Session
-          </button>
-          <button class="btn-small" id="btnCopyLaps" disabled title="Copy study blocks to clipboard">
-            📋 Copy Log
-          </button>
-          <button class="btn-small" id="btnExportCsv" disabled title="Download study log as CSV">
-            ↓ CSV
-          </button>
-        </div>
-      </div>
+        <button class="btn-small" id="btnNextWeek" title="Next Week">Next Week →</button>
+      </section>
 
-      <div class="laps-table-container">
-        <table class="laps-table" aria-label="Study Blocks Table">
-          <thead>
-            <tr>
-              <th scope="col">Block</th>
-              <th scope="col">Block Duration</th>
-              <th scope="col">Cumulative Study Time</th>
-              <th scope="col">Time Logged</th>
-            </tr>
-          </thead>
-          <tbody id="lapsTableBody">
-            <tr>
-              <td colspan="4" class="empty-laps">No study blocks logged yet. Press "Next Block" (or tap 'L') as you finish chapters or topics.</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
+      <!-- Week Stats Ribbon -->
+      <section class="week-summary-card" aria-label="Week Overview">
+        <div class="week-stat">
+          <span class="stat-label">Week Total Study</span>
+          <span class="stat-val highlight" id="weekTotalTime">0h 00m</span>
+        </div>
+        <div class="week-stat">
+          <span class="stat-label">Daily Average</span>
+          <span class="stat-val" id="weekDailyAvg">0h 00m</span>
+        </div>
+        <div class="week-stat">
+          <span class="stat-label">Top Subject</span>
+          <span class="stat-val" id="weekTopSubject">None</span>
+        </div>
+        <div class="week-stat-actions">
+          <button class="btn-small" id="btnCopyWeekDiary" title="Copy entire week diary notes to clipboard">
+            📋 Copy Diary
+          </button>
+          <button class="btn-small" id="btnExportWeekMd" title="Export week notes as Markdown file">
+            ↓ Export .md
+          </button>
+        </div>
+      </section>
+
+      <!-- 7 Days Notebook Cards: Mon, Tue, Wed, Thur, Fri, Sat, Sun -->
+      <section class="notebook-days-container" id="notebookDaysList" aria-label="7 Days Notebook Pages">
+        <!-- Dynamically populated: Mon, Tue, Wed, Thur, Fri, Sat, Sun -->
+      </section>
+
+    </div>
 
   </main>
 
-  <!-- Memory & Study Session History Drawer -->
+  <!-- Manual Add Time Modal -->
+  <div class="modal-backdrop" id="manualTimeModal" role="dialog" aria-modal="true" aria-labelledby="manualTimeTitle">
+    <div class="modal-card" style="max-width: 440px;">
+      <div class="modal-header">
+        <div class="modal-title" id="manualTimeTitle">
+          <span>+ Log Offline Study Time</span>
+        </div>
+        <button class="modal-close-btn" id="manualTimeCloseBtn" aria-label="Close Modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <form id="manualTimeForm" class="add-time-form">
+          <div class="form-group">
+            <label class="form-label" for="manualDayTarget">Target Day</label>
+            <input type="text" id="manualDayTarget" class="form-input" readonly>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="manualSubjectInput">Subject / Task</label>
+            <input type="text" id="manualSubjectInput" class="form-input" placeholder="e.g. Math, Coding, Reading" value="Overall Work" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="manualHoursInput">Hours Studied</label>
+            <input type="number" id="manualHoursInput" class="form-input" min="0" max="24" step="0.25" placeholder="e.g. 1.5 (or 2)" required>
+          </div>
+          <button type="submit" class="btn-ctrl btn-primary-toggle" style="margin-top: 0.5rem;">
+            Save to Day
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Session Archive Drawer Modal -->
   <div class="modal-backdrop" id="memoryModal" role="dialog" aria-modal="true" aria-labelledby="memoryTitle">
     <div class="modal-card">
       <div class="modal-header">
         <div class="modal-title" id="memoryTitle">
-          <span>🗂 Study Log & Session History</span>
+          <span>🗂 Saved Stopwatch Sessions</span>
         </div>
         <button class="modal-close-btn" id="memoryCloseBtn" aria-label="Close Modal">✕</button>
       </div>
