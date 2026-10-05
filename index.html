@@ -50,6 +50,11 @@
         <button class="icon-btn" id="historyToggleBtn" title="Session Archive Drawer (M)" aria-label="View Session Archive">
           🗂
         </button>
+
+        <!-- Settings & Configuration Modal -->
+        <button class="icon-btn" id="settingsToggleBtn" title="Settings & Subject Manager (P)" aria-label="Open Settings">
+          ⚙
+        </button>
       </div>
     </header>
 
@@ -318,6 +323,93 @@
         <button class="btn-small" id="btnClearAllHistory" title="Clear study memory database">
           ✕ Clear All History
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings & Subject Manager Modal -->
+  <div class="modal-backdrop" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="modal-card" style="max-width: 580px;">
+      <div class="modal-header">
+        <div class="modal-title" id="settingsTitle">
+          <span>⚙ Preferences & Customization</span>
+        </div>
+        <button class="modal-close-btn" id="settingsCloseBtn" aria-label="Close Settings">✕</button>
+      </div>
+
+      <div class="modal-body" style="gap: 1.25rem;">
+        <!-- Manage Custom Subjects -->
+        <div class="settings-section">
+          <div class="settings-section-title">
+            <span>Manage Study Subjects</span>
+            <button class="btn-tiny" id="btnResetSubjects" title="Reset to standard defaults">Reset Defaults</button>
+          </div>
+          <div class="subject-manager-chips" id="settingsSubjectChips">
+            <!-- Dynamically populated tags with delete buttons -->
+          </div>
+          <form id="addSubjectForm" class="add-subject-inline">
+            <input type="text" id="newSubjectInput" class="settings-input" placeholder="New subject (e.g. Physics, History, Gym)" style="flex:1;" required>
+            <button type="submit" class="btn-small" style="color:var(--accent-color); border-color:var(--accent-border);">+ Add Subject</button>
+          </form>
+        </div>
+
+        <!-- Daily Study Goal -->
+        <div class="settings-section">
+          <div class="settings-section-title">Daily Study Goal</div>
+          <div class="settings-field">
+            <label class="settings-label" for="settingDailyGoal">Target Focus Hours / Day</label>
+            <select id="settingDailyGoal" class="settings-select">
+              <option value="1">1 Hour</option>
+              <option value="2">2 Hours</option>
+              <option value="3">3 Hours</option>
+              <option value="4" selected>4 Hours</option>
+              <option value="5">5 Hours</option>
+              <option value="6">6 Hours</option>
+              <option value="8">8 Hours</option>
+              <option value="10">10 Hours</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Notebook & Calendar Preferences -->
+        <div class="settings-section">
+          <div class="settings-section-title">Notebook & Calendar Preferences</div>
+          <div class="settings-field">
+            <label class="settings-label" for="settingWeekStart">Week Starts On</label>
+            <select id="settingWeekStart" class="settings-select">
+              <option value="monday" selected>Monday (Mon - Sun)</option>
+              <option value="sunday">Sunday (Sun - Sat)</option>
+            </select>
+          </div>
+          <div class="settings-field">
+            <label class="settings-label" for="settingDateFormat">Date Display Format</label>
+            <select id="settingDateFormat" class="settings-select">
+              <option value="DD/MM" selected>DD/MM (e.g. 05/10)</option>
+              <option value="MM/DD">MM/DD (e.g. 10/05)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Interval Reminder Chimes (Pomodoro) -->
+        <div class="settings-section">
+          <div class="settings-section-title">Interval Chimes & Alerts</div>
+          <div class="settings-field">
+            <label class="settings-label" for="settingIntervalChime">Periodic Chime Alert</label>
+            <select id="settingIntervalChime" class="settings-select">
+              <option value="0" selected>Off (Continuous Stopwatch)</option>
+              <option value="25">Every 25 Minutes (Pomodoro)</option>
+              <option value="30">Every 30 Minutes</option>
+              <option value="45">Every 45 Minutes</option>
+              <option value="50">Every 50 Minutes</option>
+              <option value="60">Every 60 Minutes (1 Hour)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <span style="font-family:var(--font-mono); font-size:0.75rem; color:var(--text-dim);">Changes save automatically</span>
+        <button class="btn-small" id="settingsDoneBtn">Done</button>
       </div>
     </div>
   </div>

@@ -41,6 +41,26 @@ Designed specifically for students and knowledge workers who love keeping a dail
 
 ---
 
+## ⚙️ Fully Configurable Experience (<kbd>P</kbd>)
+
+You are never locked into default subjects or rigid setups:
+
+- **Dynamic Study Subjects**:
+  - Add, rename, or delete any subjects (e.g. `Bioinformatics`, `Physics`, `History`, `Thesis Writing`, `Japanese`, `Guitar`).
+  - Delete default subjects (`Math`, `Coding`, etc.) with a single click `✕` if you do not need them.
+  - Quick `+ Add` button directly in the timer view for on-the-fly subject creation without opening settings.
+  - All custom subjects immediately sync across the Live Timer chips, active subject inputs, Manual Time entry dialogs, and Weekly Diary summaries.
+- **Customizable Daily Study Goals**:
+  - Set your daily target from 1 to 10 hours per day (default 4h).
+  - Each day card in the Weekly Notebook displays a live dynamic progress bar (`.day-goal-bar`) showing completion percentage against your target.
+- **Flexible Calendar & Date Formatting**:
+  - Choose whether your week starts on **Monday** or **Sunday**.
+  - Choose between European `DD/MM` and US `MM/DD` date formats.
+- **Periodic Focus Chimes**:
+  - Optional ambient audio chime interval (25m Pomodoro, 30m, 45m, 50m, 60m, or Off).
+
+---
+
 ## ⌨️ Keyboard Shortcuts
 
 | Shortcut | Action |
@@ -49,6 +69,7 @@ Designed specifically for students and knowledge workers who love keeping a dail
 | <kbd>L</kbd> or <kbd>B</kbd> | Log Next Study Block / Topic Split |
 | <kbd>R</kbd> | End Session (Saves to Today's Notebook) |
 | <kbd>N</kbd> | Switch between **Live Timer** and **Weekly Notebook** |
+| <kbd>P</kbd> | Open **Preferences & Subject Manager** |
 | <kbd>M</kbd> | Open Past Sessions Archive |
 | <kbd>S</kbd> | Toggle Soft Audio Cues |
 | <kbd>F</kbd> | Toggle Fullscreen OLED Focus Mode |
@@ -60,3 +81,4 @@ Designed specifically for students and knowledge workers who love keeping a dail
 
 - **Direct Browser File**: Double-click [index.html](file:///c:/Tools/oled-stopwatch/index.html) in your browser. Completely self-contained and offline-ready.
 - **Launcher**: Run [Launch_OLED_Stopwatch.bat](file:///c:/Tools/LAUNCHERS/Launch_OLED_Stopwatch.bat) from `C:\Tools\LAUNCHERS\`.
+

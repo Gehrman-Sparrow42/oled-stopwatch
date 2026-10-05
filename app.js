@@ -2,16 +2,17 @@
  * CHRONO FOCUS - High-Precision Study Timer & Weekly Notebook Diary
  * Features:
  * - OLED Zero-drift timer with background Web Worker & visibility sync
- * - Active Subject / Task tagging
- * - Weekly Study Notebook (Mon-Sun) with persistent diary notes & subject hours
- * - Daily auto-aggregation from timer + manual offline hour logging
- * - Markdown & CSV export
+ * - Dynamic Custom Subjects Manager (Add / Remove / Customize any subjects)
+ * - Weekly Study Notebook with configurable Week Start (Mon / Sun) & Date Format (DD/MM vs MM/DD)
+ * - Configurable Daily Study Goals with progress bars
+ * - Configurable Periodic Focus Chimes (Pomodoro 25m, 30m, 50m...)
+ * - Persistent memory across browser sessions
  */
 
 (function () {
   'use strict';
 
-  // --- Audio Engine (Web Audio API) ---
+  // --- Audio Synthesizer (Web Audio API) ---
   class SoundEngine {
     constructor() {
       this.ctx = null;
@@ -62,6 +63,12 @@
       this.playTone(520, 'sine', 0.08, 0.1);
       setTimeout(() => this.playTone(660, 'sine', 0.1, 0.08), 80);
     }
+
+    playChime() {
+      if (!this.enabled) return;
+      this.playTone(587.33, 'sine', 0.15, 0.15); // D5
+      setTimeout(() => this.playTone(880, 'sine', 0.25, 0.15), 120); // A5
+    }
   }
 
   // --- Inline Web Worker Factory ---
@@ -90,13 +97,18 @@
   }
 
   // --- Date & Time Helper Utilities ---
-  function getMonday(d) {
+  function getWeekStart(d, weekStartDay = 'monday') {
     const date = new Date(d);
-    const day = date.getDay();
-    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-    const mon = new Date(date.setDate(diff));
-    mon.setHours(0, 0, 0, 0);
-    return mon;
+    const day = date.getDay(); // 0 = Sun, 1 = Mon...
+    let diff = 0;
+    if (weekStartDay === 'sunday') {
+      diff = date.getDate() - day;
+    } else {
+      diff = date.getDate() - day + (day === 0 ? -6 : 1);
+    }
+    const start = new Date(date.setDate(diff));
+    start.setHours(0, 0, 0, 0);
+    return start;
   }
 
   function formatDateKey(date) {
@@ -106,10 +118,10 @@
     return `${y}-${m}-${d}`;
   }
 
-  function formatDisplayDate(date) {
+  function formatDisplayDate(date, format = 'DD/MM') {
     const d = String(date.getDate()).padStart(2, '0');
     const m = String(date.getMonth() + 1).padStart(2, '0');
-    return `${d}/${m}`;
+    return format === 'MM/DD' ? `${m}/${d}` : `${d}/${m}`;
   }
 
   function formatDurationFriendly(ms) {
@@ -124,7 +136,7 @@
     return `${minutes}m`;
   }
 
-  // --- Main Stopwatch & Study Diary Application ---
+  // --- Main Application Engine ---
   class ChronoStudyApp {
     constructor() {
       // Stopwatch State
@@ -139,10 +151,18 @@
       this.savedRuns = [];
       this.activeSubject = 'Overall Work';
 
+      // Customization Preferences
+      this.customSubjects = ['Overall Work', 'Math', 'Coding', 'Reading'];
+      this.dailyGoalHours = 4;
+      this.weekStart = 'monday'; // 'monday' or 'sunday'
+      this.dateFormat = 'DD/MM'; // 'DD/MM' or 'MM/DD'
+      this.intervalChimeMinutes = 0; // 0 = off
+      this.lastChimeBucket = 0;
+
       // Diary State
-      this.studyDiary = {}; // Keyed by YYYY-MM-DD
-      this.viewingMonday = getMonday(new Date());
-      this.activeTab = 'timer'; // 'timer' or 'diary'
+      this.studyDiary = {};
+      this.viewingWeekStart = getWeekStart(new Date(), this.weekStart);
+      this.activeTab = 'timer';
 
       this.audio = new SoundEngine();
       this.worker = createWorker();
@@ -164,6 +184,7 @@
         // Subject picker
         activeSubjectInput: document.getElementById('activeSubjectInput'),
         quickSubjectChips: document.getElementById('quickSubjectChips'),
+        presetSubjects: document.getElementById('presetSubjects'),
         // Timer display
         timerHero: document.getElementById('timerHero'),
         primaryTime: document.getElementById('primaryTime'),
@@ -181,6 +202,7 @@
         soundToggleBtn: document.getElementById('soundToggleBtn'),
         fullscreenToggleBtn: document.getElementById('fullscreenToggleBtn'),
         historyToggleBtn: document.getElementById('historyToggleBtn'),
+        settingsToggleBtn: document.getElementById('settingsToggleBtn'),
         precisionBtns: document.querySelectorAll('.precision-btn'),
         themeDots: document.querySelectorAll('.theme-dot'),
         // Live Metrics
@@ -216,6 +238,18 @@
         manualDayTarget: document.getElementById('manualDayTarget'),
         manualSubjectInput: document.getElementById('manualSubjectInput'),
         manualHoursInput: document.getElementById('manualHoursInput'),
+        // Settings Modal
+        settingsModal: document.getElementById('settingsModal'),
+        settingsCloseBtn: document.getElementById('settingsCloseBtn'),
+        settingsDoneBtn: document.getElementById('settingsDoneBtn'),
+        settingsSubjectChips: document.getElementById('settingsSubjectChips'),
+        addSubjectForm: document.getElementById('addSubjectForm'),
+        newSubjectInput: document.getElementById('newSubjectInput'),
+        btnResetSubjects: document.getElementById('btnResetSubjects'),
+        settingDailyGoal: document.getElementById('settingDailyGoal'),
+        settingWeekStart: document.getElementById('settingWeekStart'),
+        settingDateFormat: document.getElementById('settingDateFormat'),
+        settingIntervalChime: document.getElementById('settingIntervalChime'),
         toast: document.getElementById('toast')
       };
     }
@@ -227,6 +261,7 @@
       this.restoreRunState();
       this.setupWorker();
       this.bindEvents();
+      this.renderSubjectPickers();
       this.updateDateBadges();
       this.render();
       this.updateLapsUI();
@@ -271,9 +306,136 @@
 
     updateDateBadges() {
       const today = new Date();
-      const str = formatDisplayDate(today);
+      const str = formatDisplayDate(today, this.dateFormat);
       if (this.dom.navDateBadge) {
         this.dom.navDateBadge.textContent = str;
+      }
+    }
+
+    // --- Subject Manager ---
+    loadSubjects() {
+      try {
+        const raw = localStorage.getItem('chrono_focus_custom_subjects');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            this.customSubjects = parsed;
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load custom subjects', e);
+      }
+    }
+
+    saveSubjects() {
+      try {
+        localStorage.setItem('chrono_focus_custom_subjects', JSON.stringify(this.customSubjects));
+      } catch (e) {
+        console.warn('Failed to save custom subjects', e);
+      }
+      this.renderSubjectPickers();
+      this.renderSettingsSubjects();
+    }
+
+    addSubject(name) {
+      if (!name) return;
+      name = name.trim();
+      if (!name) return;
+      const exists = this.customSubjects.some(s => s.toLowerCase() === name.toLowerCase());
+      if (!exists) {
+        this.customSubjects.push(name);
+        this.saveSubjects();
+        this.setSubject(name);
+        this.showToast(`Subject "${name}" added! ✓`);
+      } else {
+        this.setSubject(name);
+      }
+    }
+
+    removeSubject(name) {
+      if (this.customSubjects.length <= 1) {
+        this.showToast('You must have at least one subject.');
+        return;
+      }
+      this.customSubjects = this.customSubjects.filter(s => s.toLowerCase() !== name.toLowerCase());
+      if (this.activeSubject.toLowerCase() === name.toLowerCase()) {
+        this.setSubject(this.customSubjects[0]);
+      }
+      this.saveSubjects();
+      this.showToast(`Subject "${name}" removed.`);
+    }
+
+    resetSubjects() {
+      this.customSubjects = ['Overall Work', 'Math', 'Coding', 'Reading'];
+      this.saveSubjects();
+      this.setSubject('Overall Work');
+      this.showToast('Reset subjects to defaults.');
+    }
+
+    renderSubjectPickers() {
+      // 1. Update quick chips in Timer view
+      if (this.dom.quickSubjectChips) {
+        let chipsHtml = '';
+        this.customSubjects.forEach(sub => {
+          const isActive = (sub.toLowerCase() === this.activeSubject.toLowerCase());
+          chipsHtml += `<button type="button" class="chip ${isActive ? 'active' : ''}" data-name="${sub}">${sub}</button>`;
+        });
+        chipsHtml += `<button type="button" class="chip chip-add" id="btnQuickAddSubject" title="Add a custom subject">+ Add</button>`;
+        this.dom.quickSubjectChips.innerHTML = chipsHtml;
+
+        // Bind clicks
+        this.dom.quickSubjectChips.querySelectorAll('.chip:not(.chip-add)').forEach(chip => {
+          chip.addEventListener('click', () => {
+            this.setSubject(chip.dataset.name);
+          });
+        });
+
+        const quickAddBtn = document.getElementById('btnQuickAddSubject');
+        if (quickAddBtn) {
+          quickAddBtn.addEventListener('click', () => {
+            const newName = prompt('Enter new study subject name:');
+            if (newName) this.addSubject(newName);
+          });
+        }
+      }
+
+      // 2. Update datalist
+      if (this.dom.presetSubjects) {
+        this.dom.presetSubjects.innerHTML = this.customSubjects.map(s => `<option value="${s}">`).join('');
+      }
+    }
+
+    renderSettingsSubjects() {
+      if (!this.dom.settingsSubjectChips) return;
+      let html = '';
+      this.customSubjects.forEach(sub => {
+        html += `
+          <span class="subject-edit-tag">
+            <span>${sub}</span>
+            <button type="button" class="btn-remove-subject" data-name="${sub}" title="Remove subject">✕</button>
+          </span>
+        `;
+      });
+      this.dom.settingsSubjectChips.innerHTML = html;
+
+      this.dom.settingsSubjectChips.querySelectorAll('.btn-remove-subject').forEach(btn => {
+        btn.addEventListener('click', () => {
+          this.removeSubject(btn.dataset.name);
+        });
+      });
+    }
+
+    setSubject(name) {
+      if (!name) name = this.customSubjects[0] || 'Overall Work';
+      this.activeSubject = name.trim();
+      localStorage.setItem('chrono_focus_active_subject', this.activeSubject);
+      if (this.dom.activeSubjectInput) {
+        this.dom.activeSubjectInput.value = this.activeSubject;
+      }
+      if (this.dom.quickSubjectChips) {
+        this.dom.quickSubjectChips.querySelectorAll('.chip:not(.chip-add)').forEach(chip => {
+          chip.classList.toggle('active', chip.dataset.name.toLowerCase() === this.activeSubject.toLowerCase());
+        });
       }
     }
 
@@ -377,8 +539,40 @@
         }
         this.updateSoundButtonUI();
 
-        const savedSubject = localStorage.getItem('chrono_focus_active_subject') || 'Overall Work';
+        // Custom subjects
+        this.loadSubjects();
+
+        const savedSubject = localStorage.getItem('chrono_focus_active_subject') || this.customSubjects[0];
         this.setSubject(savedSubject);
+
+        // Daily Goal
+        const savedGoal = parseFloat(localStorage.getItem('chrono_focus_daily_goal_hours') || '4');
+        this.dailyGoalHours = isNaN(savedGoal) ? 4 : savedGoal;
+        if (this.dom.settingDailyGoal) {
+          this.dom.settingDailyGoal.value = String(this.dailyGoalHours);
+        }
+
+        // Week Start
+        const savedWeekStart = localStorage.getItem('chrono_focus_week_start') || 'monday';
+        this.weekStart = savedWeekStart;
+        if (this.dom.settingWeekStart) {
+          this.dom.settingWeekStart.value = this.weekStart;
+        }
+        this.viewingWeekStart = getWeekStart(new Date(), this.weekStart);
+
+        // Date Format
+        const savedDateFormat = localStorage.getItem('chrono_focus_date_format') || 'DD/MM';
+        this.dateFormat = savedDateFormat;
+        if (this.dom.settingDateFormat) {
+          this.dom.settingDateFormat.value = this.dateFormat;
+        }
+
+        // Interval Chime
+        const savedInterval = parseInt(localStorage.getItem('chrono_focus_interval_chime') || '0', 10);
+        this.intervalChimeMinutes = isNaN(savedInterval) ? 0 : savedInterval;
+        if (this.dom.settingIntervalChime) {
+          this.dom.settingIntervalChime.value = String(this.intervalChimeMinutes);
+        }
       } catch (e) {
         console.warn('Failed to load settings', e);
       }
@@ -438,21 +632,6 @@
       this.renderDiaryView();
     }
 
-    setSubject(name) {
-      if (!name) name = 'Overall Work';
-      this.activeSubject = name.trim();
-      localStorage.setItem('chrono_focus_active_subject', this.activeSubject);
-      if (this.dom.activeSubjectInput) {
-        this.dom.activeSubjectInput.value = this.activeSubject;
-      }
-      // Update quick chips
-      if (this.dom.quickSubjectChips) {
-        this.dom.quickSubjectChips.querySelectorAll('.chip').forEach(chip => {
-          chip.classList.toggle('active', chip.dataset.name.toLowerCase() === this.activeSubject.toLowerCase());
-        });
-      }
-    }
-
     setupWorker() {
       this.worker.onmessage = (e) => {
         if (e.data && e.data.type === 'tick') {
@@ -460,6 +639,18 @@
             const elapsed = this.getElapsedTime();
             const formatted = this.formatFullTime(elapsed, 2);
             document.title = `⏱ ${formatted} - [${this.activeSubject}] CHRONO FOCUS`;
+
+            // Check Periodic Focus Chime (Pomodoro / interval)
+            if (this.intervalChimeMinutes > 0) {
+              const intervalMs = this.intervalChimeMinutes * 60 * 1000;
+              const currentBucket = Math.floor(elapsed / intervalMs);
+              if (currentBucket > this.lastChimeBucket) {
+                this.lastChimeBucket = currentBucket;
+                this.audio.playChime();
+                this.showToast(`🔔 Focus Interval Reached (${this.intervalChimeMinutes * currentBucket}m)!`);
+              }
+            }
+
             if (Math.random() < 0.05) {
               this.saveRunState();
             }
@@ -509,6 +700,7 @@
         const now = Date.now();
         this.startTime = now;
         this.lapStartTime = now;
+        this.lastChimeBucket = Math.floor(this.accumulatedTime / (Math.max(1, this.intervalChimeMinutes) * 60 * 1000));
         this.startEngine();
         this.audio.clickStart();
       } else {
@@ -542,7 +734,7 @@
       this.lapStartTime = now;
       this.accumulatedLapTime = 0;
 
-      // Log block immediately to today's diary
+      // Log block to today's diary
       const todayKey = formatDateKey(new Date());
       this.logTimeToDiary(todayKey, this.activeSubject, lapDuration);
 
@@ -556,15 +748,12 @@
       const currentTotal = this.getElapsedTime();
       if (this.accumulatedTime === 0 && !this.running && this.laps.length === 0) return;
 
-      // Log remaining unblocked time to diary
       const currentBlockDuration = this.getCurrentLapTime();
       const todayKey = formatDateKey(new Date());
 
       if (this.laps.length === 0 && currentTotal > 15000) {
-        // Full unblocked session
         this.logTimeToDiary(todayKey, this.activeSubject, currentTotal);
       } else if (currentBlockDuration > 15000) {
-        // Last block
         this.logTimeToDiary(todayKey, this.activeSubject, currentBlockDuration);
       }
 
@@ -579,6 +768,7 @@
       this.lapStartTime = 0;
       this.accumulatedLapTime = 0;
       this.laps = [];
+      this.lastChimeBucket = 0;
 
       this.audio.clickReset();
       this.render();
@@ -682,26 +872,30 @@
 
     // --- Weekly Study Notebook Renderer ---
     renderDiaryView() {
-      const monday = new Date(this.viewingMonday);
-      const sunday = new Date(monday);
-      sunday.setDate(monday.getDate() + 6);
+      const weekStart = new Date(this.viewingWeekStart);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
 
-      const monStr = formatDisplayDate(monday);
-      const sunStr = formatDisplayDate(sunday);
-      this.dom.weekRangeTitle.textContent = `Week of ${monStr} - ${sunStr}`;
+      const startStr = formatDisplayDate(weekStart, this.dateFormat);
+      const endStr = formatDisplayDate(weekEnd, this.dateFormat);
+      this.dom.weekRangeTitle.textContent = `Week of ${startStr} - ${endStr}`;
 
-      const dayNames = ['Mon', 'Tue', 'Wed', 'Thur', 'Fri', 'Sat', 'Sun'];
+      const dayNames = this.weekStart === 'sunday'
+        ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thur', 'Fri', 'Sat']
+        : ['Mon', 'Tue', 'Wed', 'Thur', 'Fri', 'Sat', 'Sun'];
+
       const todayKey = formatDateKey(new Date());
+      const dailyGoalMs = this.dailyGoalHours * 3600 * 1000;
 
       let weekTotalMs = 0;
       const subjectTotals = {};
       let html = '';
 
       for (let i = 0; i < 7; i++) {
-        const currentDayDate = new Date(monday);
-        currentDayDate.setDate(monday.getDate() + i);
+        const currentDayDate = new Date(weekStart);
+        currentDayDate.setDate(weekStart.getDate() + i);
         const dayKey = formatDateKey(currentDayDate);
-        const dayDisplay = formatDisplayDate(currentDayDate);
+        const dayDisplay = formatDisplayDate(currentDayDate, this.dateFormat);
         const dayName = dayNames[i];
         const isToday = (dayKey === todayKey);
 
@@ -728,6 +922,10 @@
           subjectsHtml = `<span style="color:var(--text-dim); font-size:0.72rem; font-family:var(--font-mono);">No subjects logged yet</span>`;
         }
 
+        // Goal completion percentage
+        const goalPct = Math.min(100, Math.round((dayTotalMs / dailyGoalMs) * 100));
+        const goalAchieved = (dayTotalMs >= dailyGoalMs && dailyGoalMs > 0);
+
         const notesVal = dayEntry.notes || '';
 
         html += `
@@ -744,6 +942,14 @@
                   + Add Time
                 </button>
               </div>
+            </div>
+
+            <!-- Daily Study Goal Bar -->
+            <div class="day-goal-container">
+              <div class="day-goal-bar">
+                <div class="day-goal-fill ${goalAchieved ? 'completed' : ''}" style="width: ${goalPct}%;"></div>
+              </div>
+              <span>${goalAchieved ? '✓ Goal Met (' + formatDurationFriendly(dayTotalMs) + ')' : formatDurationFriendly(dayTotalMs) + ' / ' + this.dailyGoalHours + 'h Goal (' + goalPct + '%)'}</span>
             </div>
 
             <div class="day-subjects-row">
@@ -866,6 +1072,9 @@
         return;
       }
 
+      // Add subject to custom subjects if not present
+      this.addSubject(subject);
+
       const durationMs = Math.round(hours * 3600 * 1000);
       this.logTimeToDiary(dayKey, subject, durationMs);
       this.closeManualTimeModal();
@@ -874,32 +1083,35 @@
 
     // --- Week Navigation ---
     changeWeek(offsetWeeks) {
-      const mon = new Date(this.viewingMonday);
-      mon.setDate(mon.getDate() + (offsetWeeks * 7));
-      this.viewingMonday = mon;
+      const start = new Date(this.viewingWeekStart);
+      start.setDate(start.getDate() + (offsetWeeks * 7));
+      this.viewingWeekStart = start;
       this.renderDiaryView();
     }
 
     jumpToThisWeek() {
-      this.viewingMonday = getMonday(new Date());
+      this.viewingWeekStart = getWeekStart(new Date(), this.weekStart);
       this.renderDiaryView();
       this.showToast('Jumped to current week.');
     }
 
     // --- Exports ---
     copyWeekDiary() {
-      const monday = new Date(this.viewingMonday);
-      const dayNames = ['Mon', 'Tue', 'Wed', 'Thur', 'Fri', 'Sat', 'Sun'];
+      const weekStart = new Date(this.viewingWeekStart);
+      const dayNames = this.weekStart === 'sunday'
+        ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thur', 'Fri', 'Sat']
+        : ['Mon', 'Tue', 'Wed', 'Thur', 'Fri', 'Sat', 'Sun'];
 
       let text = `====================================================\n`;
-      text += `STUDY DIARY - WEEK OF ${formatDisplayDate(monday)}\n`;
+      text += `STUDY DIARY - WEEK OF ${formatDisplayDate(weekStart, this.dateFormat)}\n`;
+      text += `Daily Target Goal: ${this.dailyGoalHours} hours/day\n`;
       text += `====================================================\n\n`;
 
       for (let i = 0; i < 7; i++) {
-        const curDate = new Date(monday);
-        curDate.setDate(monday.getDate() + i);
+        const curDate = new Date(weekStart);
+        curDate.setDate(weekStart.getDate() + i);
         const dayKey = formatDateKey(curDate);
-        const dayDisplay = formatDisplayDate(curDate);
+        const dayDisplay = formatDisplayDate(curDate, this.dateFormat);
         const dayName = dayNames[i];
 
         const entry = this.studyDiary[dayKey] || { totalMs: 0, subjects: {}, notes: '' };
@@ -926,16 +1138,19 @@
     }
 
     exportWeekMarkdown() {
-      const monday = new Date(this.viewingMonday);
-      const dayNames = ['Mon', 'Tue', 'Wed', 'Thur', 'Fri', 'Sat', 'Sun'];
+      const weekStart = new Date(this.viewingWeekStart);
+      const dayNames = this.weekStart === 'sunday'
+        ? ['Sun', 'Mon', 'Tue', 'Wed', 'Thur', 'Fri', 'Sat']
+        : ['Mon', 'Tue', 'Wed', 'Thur', 'Fri', 'Sat', 'Sun'];
 
-      let md = `# Study Diary - Week of ${formatDisplayDate(monday)}\n\n`;
+      let md = `# Study Diary - Week of ${formatDisplayDate(weekStart, this.dateFormat)}\n\n`;
+      md += `*Daily Focus Goal: ${this.dailyGoalHours} hours*\n\n`;
 
       for (let i = 0; i < 7; i++) {
-        const curDate = new Date(monday);
-        curDate.setDate(monday.getDate() + i);
+        const curDate = new Date(weekStart);
+        curDate.setDate(weekStart.getDate() + i);
         const dayKey = formatDateKey(curDate);
-        const dayDisplay = formatDisplayDate(curDate);
+        const dayDisplay = formatDisplayDate(curDate, this.dateFormat);
         const dayName = dayNames[i];
 
         const entry = this.studyDiary[dayKey] || { totalMs: 0, subjects: {}, notes: '' };
@@ -957,7 +1172,7 @@
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.setAttribute('href', url);
-      link.setAttribute('download', `study_diary_${formatDateKey(monday)}.md`);
+      link.setAttribute('download', `study_diary_${formatDateKey(weekStart)}.md`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -1089,10 +1304,24 @@
       }
     }
 
+    // --- Settings Modal ---
+    openSettingsModal() {
+      this.renderSettingsSubjects();
+      this.dom.settingsModal.classList.add('open');
+    }
+
+    closeSettingsModal() {
+      this.dom.settingsModal.classList.remove('open');
+    }
+
     exportHistoryJson() {
       const backup = {
         savedRuns: this.savedRuns,
         studyDiary: this.studyDiary,
+        customSubjects: this.customSubjects,
+        dailyGoalHours: this.dailyGoalHours,
+        weekStart: this.weekStart,
+        dateFormat: this.dateFormat,
         exportedAt: new Date().toISOString()
       };
       const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
@@ -1107,7 +1336,7 @@
       this.showToast('Exported complete study backup as JSON. ✓');
     }
 
-    // --- Settings & UI ---
+    // --- Preferences Settings ---
     setPrecision(p) {
       this.precision = p;
       localStorage.setItem('chrono_oled_precision', String(p));
@@ -1169,17 +1398,13 @@
       this.dom.tabTimer.addEventListener('click', () => this.switchTab('timer'));
       this.dom.tabDiary.addEventListener('click', () => this.switchTab('diary'));
 
-      // Active Subject Input & Chips
+      // Active Subject Input
       this.dom.activeSubjectInput.addEventListener('change', (e) => {
-        this.setSubject(e.target.value);
+        const val = e.target.value.trim();
+        if (val) {
+          this.addSubject(val);
+        }
       });
-      if (this.dom.quickSubjectChips) {
-        this.dom.quickSubjectChips.querySelectorAll('.chip').forEach(chip => {
-          chip.addEventListener('click', () => {
-            this.setSubject(chip.dataset.name);
-          });
-        });
-      }
 
       // Primary Controls
       this.dom.btnStart.addEventListener('click', () => this.toggleStartStop());
@@ -1194,6 +1419,59 @@
       this.dom.memoryCloseBtn.addEventListener('click', () => this.closeMemoryModal());
       this.dom.memoryModal.addEventListener('click', (e) => {
         if (e.target === this.dom.memoryModal) this.closeMemoryModal();
+      });
+
+      this.dom.settingsToggleBtn.addEventListener('click', () => this.openSettingsModal());
+      this.dom.settingsCloseBtn.addEventListener('click', () => this.closeSettingsModal());
+      this.dom.settingsDoneBtn.addEventListener('click', () => this.closeSettingsModal());
+      this.dom.settingsModal.addEventListener('click', (e) => {
+        if (e.target === this.dom.settingsModal) this.closeSettingsModal();
+      });
+
+      // Add Subject Form in Settings
+      this.dom.addSubjectForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const val = this.dom.newSubjectInput.value.trim();
+        if (val) {
+          this.addSubject(val);
+          this.dom.newSubjectInput.value = '';
+        }
+      });
+      this.dom.btnResetSubjects.addEventListener('click', () => this.resetSubjects());
+
+      // Settings dropdowns
+      this.dom.settingDailyGoal.addEventListener('change', (e) => {
+        this.dailyGoalHours = parseFloat(e.target.value);
+        localStorage.setItem('chrono_focus_daily_goal_hours', String(this.dailyGoalHours));
+        this.renderDiaryView();
+        this.showToast(`Daily study goal updated to ${this.dailyGoalHours} hours.`);
+      });
+
+      this.dom.settingWeekStart.addEventListener('change', (e) => {
+        this.weekStart = e.target.value;
+        localStorage.setItem('chrono_focus_week_start', this.weekStart);
+        this.viewingWeekStart = getWeekStart(new Date(), this.weekStart);
+        this.renderDiaryView();
+        this.showToast(`Week start set to ${this.weekStart.toUpperCase()}.`);
+      });
+
+      this.dom.settingDateFormat.addEventListener('change', (e) => {
+        this.dateFormat = e.target.value;
+        localStorage.setItem('chrono_focus_date_format', this.dateFormat);
+        this.updateDateBadges();
+        this.renderDiaryView();
+        this.showToast(`Date format set to ${this.dateFormat}.`);
+      });
+
+      this.dom.settingIntervalChime.addEventListener('change', (e) => {
+        this.intervalChimeMinutes = parseInt(e.target.value, 10);
+        localStorage.setItem('chrono_focus_interval_chime', String(this.intervalChimeMinutes));
+        if (this.intervalChimeMinutes > 0) {
+          this.audio.playChime();
+          this.showToast(`Focus chime set to every ${this.intervalChimeMinutes} minutes!`);
+        } else {
+          this.showToast('Periodic chime disabled.');
+        }
       });
 
       this.dom.btnClearAllHistory.addEventListener('click', () => this.clearAllHistory());
@@ -1229,7 +1507,7 @@
 
       // Keyboard Shortcuts
       window.addEventListener('keydown', (e) => {
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
 
         if (e.code === 'Space') {
           e.preventDefault();
@@ -1243,6 +1521,13 @@
         } else if (e.code === 'KeyN') {
           e.preventDefault();
           this.switchTab(this.activeTab === 'timer' ? 'diary' : 'timer');
+        } else if (e.code === 'KeyP') {
+          e.preventDefault();
+          if (this.dom.settingsModal.classList.contains('open')) {
+            this.closeSettingsModal();
+          } else {
+            this.openSettingsModal();
+          }
         } else if (e.code === 'KeyF') {
           e.preventDefault();
           this.toggleFullscreen();
@@ -1259,6 +1544,7 @@
         } else if (e.code === 'Escape') {
           this.closeMemoryModal();
           this.closeManualTimeModal();
+          this.closeSettingsModal();
         }
       });
     }
