@@ -87,6 +87,7 @@ body {
   flex-direction: column;
   align-items: center;
   overflow-x: hidden;
+  -webkit-user-select: none;
   user-select: none;
 }
 
@@ -328,7 +329,7 @@ body {
 
 /* Secondary / Current Lap Floating Indicator */
 .current-lap-preview {
-  display: flex;
+  display: none;
   align-items: center;
   gap: 0.6rem;
   font-family: var(--font-mono);
@@ -642,8 +643,6 @@ body {
 .laps-table-container {
   max-height: 280px;
   overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-active) var(--bg-pure);
 }
 
 .laps-table-container::-webkit-scrollbar {
@@ -679,6 +678,11 @@ body {
   letter-spacing: 0.08em;
   border-bottom: 1px solid var(--border-subtle);
 }
+
+.laps-table th:nth-child(1) { width: 18%; }
+.laps-table th:nth-child(2) { width: 32%; }
+.laps-table th:nth-child(3) { width: 30%; }
+.laps-table th:nth-child(4) { width: 20%; }
 
 .laps-table td {
   padding: 0.65rem 1.25rem;
@@ -738,6 +742,7 @@ body {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.88);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
@@ -889,6 +894,10 @@ body {
   background: var(--bg-card);
   border-bottom-left-radius: 16px;
   border-bottom-right-radius: 16px;
+}
+
+#btnClearAllHistory {
+  color: var(--color-slowest);
 }
 
 /* Toast Notification */

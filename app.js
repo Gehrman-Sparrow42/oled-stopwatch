@@ -756,6 +756,8 @@
     }
   }
 
+  window.ChronoStopwatch = ChronoStudyTimer;
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => new ChronoStudyTimer());
   } else {
