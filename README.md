@@ -1,144 +1,87 @@
-# CHRONO FOCUS ⏱️📓
+# CHRONO FOCUS
 
-> **A true OLED pitch-black study companion combining a zero-drift precision timer with a physical-paper-inspired Weekly Study Notebook & Diary.**
+A private study stopwatch and weekly notebook with a pitch-black OLED interface. Plain JavaScript, CSS, and a small Python static server. No accounts, telemetry, external fonts, or frontend dependencies.
 
-![OLED Pitch Black](https://img.shields.io/badge/Theme-True%20OLED%20%23000000-00f3ff)
-![Zero Drift](https://img.shields.io/badge/Precision-Background%20Web%20Worker-00ff66)
-![Storage](https://img.shields.io/badge/Persistence-Client--Side%20LocalStorage-ffaa00)
-![Offline Ready](https://img.shields.io/badge/Architecture-100%25%20Offline%20%26%20Zero--Dependency-blueviolet)
-![License](https://img.shields.io/badge/License-MIT-lightgrey)
+## Start
 
----
+Use `C:\Tools\LAUNCHERS\Launch_OLED_Stopwatch.bat`, or run:
 
-## 🌟 Highlights
-
-- **Pitch-Black OLED Interface (`#000000`)**: Designed specifically for late-night focus sessions with zero eye strain and maximal battery savings on OLED / AMOLED displays.
-- **Physical-Notebook Study Diary**: Emulates the natural habit of keeping a physical paper notebook diary with chronological 7-day pages (`Monday` through `Sunday`), day-by-day notes, and subject breakdowns.
-- **Smart Note Parser & Quick-Paste**: Write or paste natural shorthand notes like `120 dk diff`, `70 dk molbio`, or `40 dk molbio diff eq tekrar` and have the app automatically parse minutes, register subjects, and log daily hours!
-- **Dynamic Subject Manager**: You are never locked into predefined subjects. Add, rename, or delete subjects (`diff`, `molbio`, `mass`, `biomaterial`, `coding`, `reading`, etc.) on the fly with a single click.
-- **Customizable Daily Study Goals**: Set your daily focus target (1h to 10h/day). Every day card features a live dynamic progress bar visualizing your progress.
-- **Zero-Drift Background Continuity**: Powered by monotonic wall-clock arithmetic (`Date.now()`) and an inline Web Worker ticker that never slows down or drifts when tabs are minimized or the OS throttles timers.
-- **100% Private & Offline**: All data stays locally in your browser's `localStorage`. No accounts, no cloud tracking, no cookies, zero external network dependencies.
-
----
-
-## 📓 Weekly Study Notebook & Diary
-
-### 1. Natural Paper-Style Logging
-Students and knowledge workers often jot down notes in notebooks like this:
-
-```text
-06/04
-120 dk diff
-07/04
-55 dk diff
-70 dk molbio
-08/04
-100dk molbio
-09/04
-40 dk molbio diff eq tekrar
-130 dk mass
-10/04
-170dk mass
-11/04
-nothin
+```powershell
+& C:\Tools\.venv\Scripts\python.exe server.py
 ```
 
-CHRONO FOCUS treats this shorthand as a first-class citizen:
-- **`⚡ Sync Note` Button**: Type or paste lines like `120 dk diff` directly into any day's note block, click `⚡ Sync Note`, and the app immediately parses durations (`dk`, `min`, `m`, `h`), totals the hours, extracts the subject, and updates that day's progress bar.
-- **`📥 Paste Diary` (Multi-Day Batch Importer)**: Paste an entire exam week or month of notes into the Quick-Paste modal. The app parses every date, detects rest days (`nothin`), creates new subjects automatically, and loads the week into your diary.
-- **`+ Add Time` Modal**: Supports offline study logging with flexible natural inputs (`120 dk`, `90m`, `1.5h`, or quick shorthand `120 dk diff`).
+The server binds to `http://127.0.0.1:8110`. You can also open `index.html` directly. Browser storage belongs to its origin: direct-file mode, `localhost`, `127.0.0.1`, and different ports may have separate records. Use the same address consistently, or transfer a backup.
 
-### 2. 7-Day Chronological Weekly Layout
-- Displays your full week (`Monday` to `Sunday` or `Sunday` to `Saturday`).
-- Highlights **TODAY** with a glowing cyan OLED badge.
-- Navigate across weeks with `← Prev Week` and `Next Week →`, or jump instantly to current week with `Today`.
-- Auto-saves every keystroke continuously to `localStorage` with a subtle visual indicator.
-- **`+ Stamp Hours`**: One-click stamps a clean summary of that day's studied subjects directly into your diary notes.
+## Study sessions
 
-### 3. Forgot-to-Stop Protection & Flexible Session Editing
-- **End-of-Session Review Modal**: Pressing <kbd>R</kbd> or clicking **End Session** brings up an explicit review dialog:
-  - **`✓ Save to Today's Diary`**: Confirms and logs the session to today's notebook.
-  - **`✏️ Adjust Time`**: If you stepped away or left the timer running too long, quickly adjust the actual focus time (e.g., enter `45m`, `1.5h`, or `70 dk`) before saving.
-  - **`✕ Discard Session`**: Completely discards the timer session. Today's notebook and diary remain untouched.
-- **Forgot-to-Stop Idle Warning**: Configure an idle threshold (60m, 90m, 120m, 180m, 240m) in Preferences. If the timer exceeds this duration, the review modal displays a prominent warning prompt to prevent accidental over-counting.
-- **One-Click Subject & Day Deletion**: Every subject pill in the Weekly Notebook cards has an instant `✕` delete button. Hover or tap to remove any accidentally logged subject time, with dynamic recalculation of total hours. Each day also includes a `✕ Clear` button to reset hours if needed.
+Start study, pause during breaks, and choose Next block when you finish a topic. Changing the subject closes the previous block under its original subject. All blocks remain in a recoverable draft until you finish the session.
 
-### 4. Weekly Summary & Export
-- Live ribbon summarizing **Total Focus Hours**, **Daily Average**, and **Top Studied Subject**.
-- **`📋 Copy Diary`**: One-click copies the full formatted week to clipboard for archiving or sending.
-- **`↓ Export .md`**: Downloads a clean Markdown file formatted for Obsidian, Notion, or personal logs.
+End session opens a review with editable subjects, dates, and durations. Save commits the session exactly once to the notebook and session archive. Discard removes the unfinished session without changing recorded diary totals. Whole-session duration adjustment preserves the proportions of the reviewed blocks. Each block defaults to its local completion date; sessions are not automatically split at midnight.
 
----
+Preferences can enable immediate saving, but recovered drafts and timing anomalies always require review. The warning threshold measures session duration, not detected user inactivity.
 
-## ⏱️ Live Study Timer
+Elapsed time uses timestamps rather than counting worker ticks. HTTP mode uses a one-second background worker; direct-file mode uses a regular ticker. Browsers can suspend either mechanism. Reloaded running drafts include the time while the page was closed, so review long sessions before saving. Clock changes detected during use pause the timer for review. Timestamps are wall-clock values, not a monotonic precision clock; timing cannot be guaranteed through every sleep or OS clock change.
 
-- **Active Subject Picker**: Quick-select chips or type custom subjects on the fly. Time elapsed is credited automatically to that subject.
-- **Study Blocks & Topic Splits**: Tap <kbd>L</kbd> or `Next Block` as you finish chapters or topics. A live block preview tracks split times.
-- **Browser Tab Live Mirroring**: The browser tab title updates continuously (e.g. `⏱ 45:12.00 - [diff] CHRONO FOCUS`), allowing you to track progress even when the tab is in the background.
-- **Audio Feedback**: Subtle synthesized web-audio clicks and optional periodic interval chimes (25m Pomodoro, 30m, 45m, 50m, 60m).
-- **Session Archive Drawer (<kbd>M</kbd>)**: Review past stopwatch sessions, inspect individual lap blocks, export JSON backups, or export CSV tables.
+## Notebook and subjects
 
----
+The weekly notebook retains seven chronological days, daily goals, subject totals, and autosaved freeform notes. Expand Entries to edit duration, date, or subject. Linked session totals update from those entries. Subject badges retain a remove-time control with Undo. Day actions offers manual time, note sync, summary stamping, and clearing time. Clearing time preserves notes. Manual time accepts durations or shorthand such as `120 dk Math`.
 
-## ⚙️ Preferences & Customization (<kbd>P</kbd>)
+Preferences supports adding, renaming, and removing subjects. Renaming updates historical labels and drafts through stable IDs without altering note text. Removing hides a subject from selection and retains its recorded history. Duplicate names and removal of the last selectable subject are prevented.
 
-| Setting | Options / Description |
-| :--- | :--- |
-| **Manage Subjects** | Create any custom subject chip; delete any subject with `✕`. |
-| **Daily Study Goal** | Select daily target from `1h` to `10h/day` (default `4h`). |
-| **Week Starts On** | `Monday (Monday - Sunday)` or `Sunday (Sunday - Saturday)`. |
-| **Date Display Format** | `DD/MM` (e.g. `06/04`) or `MM/DD` (e.g. `04/06`). |
-| **Forgot-to-Stop Alert** | `Off`, `60m`, `90m`, `120m (Default)`, `180m`, or `240m`. |
-| **End Session Behavior** | `Always Review & Confirm` (Default) or `Auto-Save Instantly`. |
-| **Periodic Focus Chimes** | `Off`, `25m (Pomodoro)`, `30m`, `45m`, `50m`, or `60m`. |
-| **Theme Accents** | Emerald Cyan, Cyber Blue, Solar Gold, Crimson, Obsidian Mono. |
-| **Timer Precision** | `1/100s` (<kbd>2</kbd>) or `1/1000s` (<kbd>3</kbd>). |
+Deleting an entry, a day's time, or one session offers ten seconds of Undo. Another committed edit invalidates Undo. Deleting a session removes its linked diary entries. Deleting the entire archive requires confirmation; manual entries, imports, legacy daily totals, and notes remain.
 
----
+## Notes, imports, and exports
 
-## ⌨️ Keyboard Shortcuts
+Durations accept `120 dk`, `90m`, `1.5h`, `1,5h`, and seconds such as `30s`. A bare number always means minutes. Notes also accept shorthand such as `40 dk molbio diff eq tekrar`; the longest existing subject prefix takes precedence.
 
-| Shortcut | Action |
-| :--- | :--- |
-| <kbd>Space</kbd> | Start Study / Take Break |
-| <kbd>L</kbd> or <kbd>B</kbd> | Log Next Study Block / Topic Split |
-| <kbd>R</kbd> | End Session (Saves to Today's Notebook) |
-| <kbd>N</kbd> | Switch between **Live Timer** and **Weekly Notebook** |
-| <kbd>P</kbd> | Open **Preferences & Subject Manager** |
-| <kbd>M</kbd> or <kbd>H</kbd> | Open Past Sessions Archive |
-| <kbd>S</kbd> | Toggle Soft Audio Cues |
-| <kbd>F</kbd> | Toggle Fullscreen OLED Focus Mode |
-| <kbd>2</kbd> / <kbd>3</kbd> | Toggle Precision (1/100s vs 1/1000s) |
-| <kbd>Esc</kbd> | Close any open modal |
+Sync notes previews what will be recorded and replaces only that day's previous note-generated entries. Repeating a sync does not add time again. Imported lines and stamped study summaries are excluded. Editing a synced entry manually can be superseded by a later sync of its source notes.
 
----
+Paste diary accepts dates such as `06/10`, `06/10/2026`, or `2026-10-06`, followed by study lines or ordinary notes. Short dates follow Preferences' date format. Invalid calendar dates prevent the entire import. Changing the text, year, or format invalidates its preview. Applying identical text with the same year and format again is a no-op. Distinct imported batches add records; intentional corrections should be made in Entries.
 
-## 🚀 Getting Started
+Copy or export the current week as Markdown. Completed draft blocks can be copied or exported as CSV from the collapsible block section. Subjects and notes containing HTML are displayed literally.
 
-### Option 1: Standalone Browser File (Zero Setup)
-Simply double-click [index.html](file:///c:/Tools/oled-stopwatch/index.html) in any modern browser (Chrome, Edge, Firefox, Brave, Safari). No installation, build steps, or internet connection required.
+## Backup and recovery
 
-### Option 2: Windows Desktop Launcher
-Run the dedicated launcher from `C:\Tools\LAUNCHERS\`:
-```cmd
-C:\Tools\LAUNCHERS\Launch_OLED_Stopwatch.bat
+Preferences → Download backup exports all entries, notes, sessions, subjects, preferences, and the active draft. Download a backup regularly: clearing browser data removes local records.
+
+Restore validates the complete JSON file and previews its contents before replacing current data. Finish or discard an active session before replacement. Both current v2 backups and the original app's unversioned JSON exports are supported. Drafts from restored backups reopen paused for review. A Previous snapshot download in Preferences provides the data from before the most recent successful restore attempt.
+
+Data and the restored draft are replaced in one localStorage write. Quota or access failures leave committed state intact and display an error. Notes remain marked unsaved on failure and are included in downloaded backups. Another tab changing data or the draft pauses this tab and requires reload before editing.
+
+### Upgrade from the earlier app
+
+Existing daily subject totals become editable entries labeled Legacy daily total. Recorded daily totals are preserved; inconsistent subject breakdowns are scaled to match their stored daily total. Old archive sessions remain historical references and do not add time to the diary again. Historical double-counting cannot be reliably corrected automatically.
+
+An older active draft reopens paused. Its completed blocks were already credited by the earlier app, so only its unfinished/new blocks can be saved. The original `chrono_*` storage keys are retained, untouched, for recovery. The v2 committed document is `chrono_focus_data_v2`; the draft is `chrono_focus_draft_v2`.
+
+## Minimal display and keyboard access
+
+Focus view shows the subject, timer, status, and essential controls. Exit focus view remains visible. Fullscreen is independent. Accent and precision choices live in Preferences. The UI uses system fonts, visible focus outlines, native modal dialogs, and no decorative animation.
+
+| Key | Action |
+| --- | --- |
+| Space | Start / pause (focused buttons retain normal Space activation) |
+| L / B | Next block |
+| R | End session |
+| N | Switch timer / notebook |
+| P | Preferences |
+| M / H | Sessions |
+| F | Fullscreen |
+| S | Toggle sound |
+| 2 / 3 | Hundredths / milliseconds |
+| Escape | Close dialog or exit focus view |
+
+Timer shortcuts are suppressed inside dialogs and editable fields. Tab selects controls; Left/Right arrows change the selected main tab.
+
+## Validation
+
+```powershell
+node --test core.test.js app.test.js
+node --check core.js
+node --check app.js
+node --check worker.js
+& C:\Tools\.venv\Scripts\python.exe -m py_compile server.py test_health.py
+& C:\Tools\.venv\Scripts\python.exe test_health.py
 ```
 
-### Option 3: Local Python HTTP Server
-```bash
-python server.py
-# Opens automatically at http://127.0.0.1:8110
-```
-
----
-
-## 🔒 Privacy & Architecture
-
-- **100% Local**: No external telemetry, no remote servers, no third-party CDNs.
-- **Web Worker Ticker**: Prevents browser throttling during background execution.
-- **Data Export & Portability**: Full JSON backup/restore and Markdown exports guarantee you always own your study data.
-
----
-
-*Crafted for distraction-free deep work and disciplined study habits.*
+The health test runs the production static handler on an available loopback port, checks the HTML and all application assets, then closes its server.

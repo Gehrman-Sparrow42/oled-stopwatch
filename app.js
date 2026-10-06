@@ -1,2065 +1,580 @@
-/**
- * CHRONO FOCUS - High-Precision Study Timer & Weekly Notebook Diary
- * Features:
- * - OLED Zero-drift timer with background Web Worker & visibility sync
- * - Dynamic Custom Subjects Manager (Add / Remove / Customize any subjects)
- * - Weekly Study Notebook with configurable Week Start (Mon / Sun) & Date Format (DD/MM vs MM/DD)
- * - Configurable Daily Study Goals with progress bars
- * - Configurable Periodic Focus Chimes (Pomodoro 25m, 30m, 50m...)
- * - Persistent memory across browser sessions
- */
-
+/* CHRONO FOCUS UI. User content uses textContent and value, never HTML. */
 (function () {
   'use strict';
-
-  // --- Audio Synthesizer (Web Audio API) ---
-  class SoundEngine {
-    constructor() {
-      this.ctx = null;
-      this.enabled = true;
-    }
-
-    init() {
-      if (!this.ctx) {
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        if (AudioContext) {
-          this.ctx = new AudioContext();
-        }
-      }
-      if (this.ctx && this.ctx.state === 'suspended') {
-        this.ctx.resume();
-      }
-    }
-
-    playTone(freq, type = 'sine', duration = 0.04, gainVal = 0.15) {
-      if (!this.enabled) return;
-      this.init();
-      if (!this.ctx) return;
-
-      try {
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-
-        gain.gain.setValueAtTime(gainVal, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
-
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-
-        osc.start();
-        osc.stop(this.ctx.currentTime + duration);
-      } catch (e) {
-        console.warn('Audio play failed', e);
-      }
-    }
-
-    clickStart() { this.playTone(880, 'triangle', 0.05, 0.12); }
-    clickStop() { this.playTone(440, 'sine', 0.06, 0.12); }
-    clickLap() { this.playTone(1320, 'sine', 0.04, 0.1); }
-    clickReset() {
-      this.playTone(520, 'sine', 0.08, 0.1);
-      setTimeout(() => this.playTone(660, 'sine', 0.1, 0.08), 80);
-    }
-
-    playChime() {
-      if (!this.enabled) return;
-      this.playTone(587.33, 'sine', 0.15, 0.15); // D5
-      setTimeout(() => this.playTone(880, 'sine', 0.25, 0.15), 120); // A5
-    }
+  const C = window.ChronoCore;
+  const $ = id => document.getElementById(id);
+  function el(tag, text, className) {
+    const node = document.createElement(tag);
+    if (text !== undefined && text !== null) node.textContent = String(text);
+    if (className) node.className = className;
+    return node;
   }
-
-  // --- Inline Web Worker Factory ---
-  function createWorker() {
-    const workerCode = `
-      let timerId = null;
-      let intervalMs = 25;
-      self.onmessage = function(e) {
-        const { command, interval } = e.data || {};
-        if (command === 'start') {
-          if (interval) intervalMs = interval;
-          if (timerId !== null) clearInterval(timerId);
-          timerId = setInterval(() => {
-            self.postMessage({ type: 'tick', now: Date.now() });
-          }, intervalMs);
-        } else if (command === 'stop') {
-          if (timerId !== null) {
-            clearInterval(timerId);
-            timerId = null;
-          }
-        }
-      };
-    `;
-    const blob = new Blob([workerCode], { type: 'application/javascript' });
-    return new Worker(URL.createObjectURL(blob));
+  function button(text, action, value, className) {
+    const node = el('button',text,className); node.type = 'button';
+    if (action) node.dataset.action = action;
+    if (value !== undefined) node.dataset.value = value;
+    return node;
   }
-
-  // --- Date & Time Helper Utilities ---
-  function getWeekStart(d, weekStartDay = 'monday') {
-    const date = new Date(d);
-    const day = date.getDay(); // 0 = Sun, 1 = Mon...
-    let diff = 0;
-    if (weekStartDay === 'sunday') {
-      diff = date.getDate() - day;
-    } else {
-      diff = date.getDate() - day + (day === 0 ? -6 : 1);
-    }
-    const start = new Date(date.setDate(diff));
-    start.setHours(0, 0, 0, 0);
-    return start;
+  function field(label, control) {
+    const node = el('label',undefined,'field'); node.append(document.createTextNode(label),control); return node;
   }
-
-  function formatDateKey(date) {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+  function pretty(ms) {
+    if (!ms) return '0m';
+    const seconds = Math.floor(ms/1000), hours = Math.floor(seconds/3600), minutes = Math.floor(seconds%3600/60);
+    return hours ? `${hours}h ${minutes}m` : minutes ? `${minutes}m` : seconds ? `${seconds}s` : '<1s';
   }
-
-  function formatDisplayDate(date, format = 'DD/MM') {
-    const d = String(date.getDate()).padStart(2, '0');
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    return format === 'MM/DD' ? `${m}/${d}` : `${d}/${m}`;
+  const durationInput = ms => ms % 60000 === 0 ? `${ms / 60000}m` : `${ms / 1000}s`;
+  function timeParts(ms, precision = 2) {
+    const total = Math.floor(Math.max(0,ms)/1000), hours = Math.floor(total/3600);
+    const pad = (value, width = 2) => String(value).padStart(width,'0');
+    return [(hours ? pad(hours)+':' : '') + pad(Math.floor(total%3600/60))+':'+pad(total%60),
+      '.'+pad(precision === 3 ? Math.floor(ms%1000) : Math.floor(ms%1000/10),precision)];
   }
-
-  function formatDurationFriendly(ms) {
-    if (!ms || ms <= 0) return '0m';
-    const totalSecs = Math.floor(ms / 1000);
-    const hours = Math.floor(totalSecs / 3600);
-    const minutes = Math.floor((totalSecs % 3600) / 60);
-
-    if (hours > 0) {
-      return `${hours}h ${minutes}m`;
-    }
-    return `${minutes}m`;
-  }
-
-  // --- Flexible Duration & Note Line Parsers ---
-  function parseDurationString(str) {
-    if (!str) return null;
-    const s = str.trim();
-    // Match e.g. "120 dk", "120dk", "90min", "90 min", "55m", "1.5h", "2 hours", "45"
-    const match = s.match(/^(\d+(?:\.\d+)?)\s*(dk|dakika|min|m|hours?|hrs?|h)?$/i);
-    if (match) {
-      const num = parseFloat(match[1]);
-      const unit = (match[2] || '').toLowerCase();
-      if (['dk', 'dakika', 'min', 'm'].includes(unit)) {
-        return num * 60 * 1000;
-      } else if (['h', 'hr', 'hrs', 'hour', 'hours'].includes(unit)) {
-        return num * 3600 * 1000;
-      } else {
-        // No unit: if >= 15 assume minutes, else assume hours
-        return (num >= 15 ? num * 60 : num * 3600) * 1000;
-      }
-    }
-    return null;
-  }
-
-  function parseStudyLine(line, existingSubjects = []) {
-    const trimmed = line.trim();
-    if (!trimmed) return null;
-
-    // Check rest / nothing / dinlenme
-    if (/^(nothin|nothing|rest|dinlenme|bos|boş|tatil|off|yok|none)$/i.test(trimmed)) {
-      return { isRest: true, note: trimmed };
-    }
-
-    // Check "120 dk diff", "55 dk diff", "40 dk molbio diff eq tekrar", "100dk molbio"
-    const match = trimmed.match(/^(\d+(?:\.\d+)?)\s*(?:(dk|dakika|min|m|hours?|hrs?|h)\b)?\s*(.*)$/i);
-    if (match) {
-      const num = parseFloat(match[1]);
-      const unit = (match[2] || '').toLowerCase();
-      let durationMs = 0;
-      if (['dk', 'dakika', 'min', 'm'].includes(unit)) {
-        durationMs = num * 60 * 1000;
-      } else if (['h', 'hr', 'hrs', 'hour', 'hours'].includes(unit)) {
-        durationMs = num * 3600 * 1000;
-      } else {
-        durationMs = (num >= 15 ? num * 60 : num * 3600) * 1000;
-      }
-
-      const rest = (match[3] || '').trim();
-      if (!rest) {
-        return { durationMs, subject: 'Overall Work', note: '' };
-      }
-
-      let subject = rest;
-      let note = '';
-
-      // Check if rest begins with an existing subject
-      const lowerRest = rest.toLowerCase();
-      const sortedSubs = [...existingSubjects].sort((a, b) => b.length - a.length);
-      for (const sub of sortedSubs) {
-        if (lowerRest === sub.toLowerCase() || lowerRest.startsWith(sub.toLowerCase() + ' ')) {
-          subject = sub;
-          note = rest.slice(sub.length).trim();
-          return { durationMs, subject, note };
-        }
-      }
-
-      // Check keywords like "tekrar", "review", "ch", "chapter", "hw", "soru", "lab"
-      const keywordMatch = rest.match(/^(.*?)\s+(tekrar|review|ch(?:apter)?|\d+|soru|ödev|hw|quiz|exam|test|lab|çalışma)\b(.*)$/i);
-      if (keywordMatch && keywordMatch[1].trim()) {
-        subject = keywordMatch[1].trim();
-        note = (keywordMatch[2] + ' ' + (keywordMatch[3] || '')).trim();
-      }
-
-      return { durationMs, subject, note };
-    }
-
-    return { isTextOnly: true, note: trimmed };
-  }
-
-  // --- Main Application Engine ---
   class ChronoStudyApp {
     constructor() {
-      // Stopwatch State
-      this.running = false;
-      this.startTime = 0;
-      this.accumulatedTime = 0;
-      this.lapStartTime = 0;
-      this.accumulatedLapTime = 0;
-      this.laps = [];
-      this.precision = 2;
-      this.theme = 'emerald';
-      this.savedRuns = [];
-      this.activeSubject = 'Overall Work';
-
-      // Customization Preferences
-      this.customSubjects = ['Overall Work', 'Math', 'Coding', 'Reading'];
-      this.dailyGoalHours = 4;
-      this.weekStart = 'monday'; // 'monday' or 'sunday'
-      this.dateFormat = 'DD/MM'; // 'DD/MM' or 'MM/DD'
-      this.intervalChimeMinutes = 0; // 0 = off
-      this.lastChimeBucket = 0;
-      this.idleAlertMinutes = 120; // 0 = off, default 120m
-      this.confirmEndSession = 'always'; // 'always' or 'auto'
-      this.pendingEndSessionDuration = 0;
-
-      // Diary State
-      this.studyDiary = {};
-      this.viewingWeekStart = getWeekStart(new Date(), this.weekStart);
-      this.activeTab = 'timer';
-
-      this.audio = new SoundEngine();
-      this.worker = createWorker();
-      this.rafId = null;
-
-      this.cacheDom();
-      this.init();
-    }
-
-    cacheDom() {
-      this.dom = {
-        appContainer: document.getElementById('appContainer'),
-        // Tabs
-        tabTimer: document.getElementById('tabTimer'),
-        tabDiary: document.getElementById('tabDiary'),
-        viewTimer: document.getElementById('viewTimer'),
-        viewDiary: document.getElementById('viewDiary'),
-        navDateBadge: document.getElementById('navDateBadge'),
-        // Subject picker
-        activeSubjectInput: document.getElementById('activeSubjectInput'),
-        quickSubjectChips: document.getElementById('quickSubjectChips'),
-        presetSubjects: document.getElementById('presetSubjects'),
-        // Timer display
-        timerHero: document.getElementById('timerHero'),
-        primaryTime: document.getElementById('primaryTime'),
-        millisTime: document.getElementById('millisTime'),
-        statusPill: document.getElementById('statusPill'),
-        currentLapPreview: document.getElementById('currentLapPreview'),
-        currentLapVal: document.getElementById('currentLapVal'),
-        currentLapNumber: document.getElementById('currentLapNumber'),
-        // Controls
-        btnStart: document.getElementById('btnStart'),
-        btnLap: document.getElementById('btnLap'),
-        btnReset: document.getElementById('btnReset'),
-        btnSaveSession: document.getElementById('btnSaveSession'),
-        // Header tools
-        soundToggleBtn: document.getElementById('soundToggleBtn'),
-        fullscreenToggleBtn: document.getElementById('fullscreenToggleBtn'),
-        historyToggleBtn: document.getElementById('historyToggleBtn'),
-        settingsToggleBtn: document.getElementById('settingsToggleBtn'),
-        precisionBtns: document.querySelectorAll('.precision-btn'),
-        themeDots: document.querySelectorAll('.theme-dot'),
-        // Live Metrics
-        statTotalStudy: document.getElementById('statTotalStudy'),
-        statCurrentBlock: document.getElementById('statCurrentBlock'),
-        statAvgBlock: document.getElementById('statAvgBlock'),
-        statTotalBlocks: document.getElementById('statTotalBlocks'),
-        // Table
-        lapsTableBody: document.getElementById('lapsTableBody'),
-        lapsCountBadge: document.getElementById('lapsCountBadge'),
-        btnCopyLaps: document.getElementById('btnCopyLaps'),
-        btnExportCsv: document.getElementById('btnExportCsv'),
-        // Diary
-        weekRangeTitle: document.getElementById('weekRangeTitle'),
-        btnPrevWeek: document.getElementById('btnPrevWeek'),
-        btnNextWeek: document.getElementById('btnNextWeek'),
-        btnJumpToday: document.getElementById('btnJumpToday'),
-        weekTotalTime: document.getElementById('weekTotalTime'),
-        weekDailyAvg: document.getElementById('weekDailyAvg'),
-        weekTopSubject: document.getElementById('weekTopSubject'),
-        btnOpenQuickImport: document.getElementById('btnOpenQuickImport'),
-        btnCopyWeekDiary: document.getElementById('btnCopyWeekDiary'),
-        btnExportWeekMd: document.getElementById('btnExportWeekMd'),
-        notebookDaysList: document.getElementById('notebookDaysList'),
-        // Modals
-        memoryModal: document.getElementById('memoryModal'),
-        memoryCloseBtn: document.getElementById('memoryCloseBtn'),
-        savedRunsList: document.getElementById('savedRunsList'),
-        btnClearAllHistory: document.getElementById('btnClearAllHistory'),
-        btnExportJson: document.getElementById('btnExportJson'),
-        manualTimeModal: document.getElementById('manualTimeModal'),
-        manualTimeCloseBtn: document.getElementById('manualTimeCloseBtn'),
-        manualTimeForm: document.getElementById('manualTimeForm'),
-        manualDayTarget: document.getElementById('manualDayTarget'),
-        manualSubjectInput: document.getElementById('manualSubjectInput'),
-        manualHoursInput: document.getElementById('manualHoursInput'),
-        // Settings Modal
-        settingsModal: document.getElementById('settingsModal'),
-        settingsCloseBtn: document.getElementById('settingsCloseBtn'),
-        settingsDoneBtn: document.getElementById('settingsDoneBtn'),
-        settingsSubjectChips: document.getElementById('settingsSubjectChips'),
-        addSubjectForm: document.getElementById('addSubjectForm'),
-        newSubjectInput: document.getElementById('newSubjectInput'),
-        btnResetSubjects: document.getElementById('btnResetSubjects'),
-        settingDailyGoal: document.getElementById('settingDailyGoal'),
-        settingWeekStart: document.getElementById('settingWeekStart'),
-        settingDateFormat: document.getElementById('settingDateFormat'),
-        settingIntervalChime: document.getElementById('settingIntervalChime'),
-        settingIdleAlert: document.getElementById('settingIdleAlert'),
-        settingConfirmEndSession: document.getElementById('settingConfirmEndSession'),
-        // End Session Review Modal
-        endSessionModal: document.getElementById('endSessionModal'),
-        endSessionCloseBtn: document.getElementById('endSessionCloseBtn'),
-        reviewSessionDuration: document.getElementById('reviewSessionDuration'),
-        reviewSessionMeta: document.getElementById('reviewSessionMeta'),
-        reviewWarningBox: document.getElementById('reviewWarningBox'),
-        adjustTimeGroup: document.getElementById('adjustTimeGroup'),
-        adjustTimeInput: document.getElementById('adjustTimeInput'),
-        btnConfirmSaveSession: document.getElementById('btnConfirmSaveSession'),
-        btnToggleAdjustTime: document.getElementById('btnToggleAdjustTime'),
-        btnDiscardSession: document.getElementById('btnDiscardSession'),
-        // Quick Import Modal
-        quickImportModal: document.getElementById('quickImportModal'),
-        quickImportCloseBtn: document.getElementById('quickImportCloseBtn'),
-        quickImportTextarea: document.getElementById('quickImportTextarea'),
-        importYearSelect: document.getElementById('importYearSelect'),
-        importPreviewBox: document.getElementById('importPreviewBox'),
-        btnPreviewImport: document.getElementById('btnPreviewImport'),
-        btnApplyImport: document.getElementById('btnApplyImport'),
-        toast: document.getElementById('toast')
-      };
-    }
-
-    init() {
-      this.loadSettings();
-      this.loadHistory();
-      this.loadDiary();
-      this.restoreRunState();
-      this.setupWorker();
-      this.bindEvents();
-      this.renderSubjectPickers();
-      this.updateDateBadges();
-      this.render();
-      this.updateLapsUI();
-      this.renderDiaryView();
-
-      // Visibility API for background continuity
+      this.storage = window.localStorage;
+      this.tab = 'timer'; this.focusMode = false; this.stale = false; this.raf = null;
+      this.entryId = null; this.pendingImport = null; this.pendingRestore = null;
+      this.audio = null; this.worker = null; this.fallbackTicker = null;
+      this.lastCheckpoint = Date.now(); this.lastWall = Date.now(); this.lastMono = performance.now();
+      this.noteTimers = new Map(); this.dirtyNotes = new Map();
+      this.load(); this.bind(); this.setupTicker(); this.renderAll();
+      window.addEventListener('storage', e => {
+        if (e.key !== C.KEY && e.key !== C.DRAFT_KEY && e.key !== null) return;
+        try {
+          // A queued event from navigation can describe a revision that is no
+          // longer current. Compare the current stored versions, not the event.
+          const draft = this.storage.getItem(C.DRAFT_KEY);
+          if (!this.store.isCurrent() || (draft ? JSON.parse(draft).revision : null) !== this.draftRevision) this.markStale();
+        } catch { this.markStale(); }
+      });
       document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-          this.render();
-          if (this.running) {
-            this.startRafLoop();
-          }
-        }
+        if (!document.hidden) { this.renderTimer(); this.renderDiaryIfVisible(); }
+        this.flushNotes(); this.persistDraft();
       });
-
-      // Window unload persistence
-      window.addEventListener('beforeunload', () => {
-        this.saveRunState();
+      window.addEventListener('pagehide', () => { this.flushNotes(); this.persistDraft(); });
+      window.addEventListener('beforeunload', e => {
+        this.flushNotes(); this.persistDraft();
+        if (this.dirtyNotes.size || this.draftWriteFailed) { e.preventDefault(); e.returnValue = ''; }
       });
+      if (this.draft.needsReview || this.draft.legacyNotice) this.toast('Recovered draft is paused. Review it before saving.');
     }
-
-    // --- Tab Switching ---
-    switchTab(tabName) {
-      this.activeTab = tabName;
-      if (tabName === 'timer') {
-        this.dom.tabTimer.classList.add('active');
-        this.dom.tabTimer.setAttribute('aria-selected', 'true');
-        this.dom.tabDiary.classList.remove('active');
-        this.dom.tabDiary.setAttribute('aria-selected', 'false');
-        this.dom.viewTimer.classList.add('active');
-        this.dom.viewDiary.classList.remove('active');
-      } else {
-        this.dom.tabDiary.classList.add('active');
-        this.dom.tabDiary.setAttribute('aria-selected', 'true');
-        this.dom.tabTimer.classList.remove('active');
-        this.dom.tabTimer.setAttribute('aria-selected', 'false');
-        this.dom.viewDiary.classList.add('active');
-        this.dom.viewTimer.classList.remove('active');
-        this.renderDiaryView();
-      }
-    }
-
-    updateDateBadges() {
-      const today = new Date();
-      const str = formatDisplayDate(today, this.dateFormat);
-      if (this.dom.navDateBadge) {
-        this.dom.navDateBadge.textContent = str;
-      }
-    }
-
-    // --- Subject Manager ---
-    loadSubjects() {
-      try {
-        const raw = localStorage.getItem('chrono_focus_custom_subjects');
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            this.customSubjects = parsed;
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to load custom subjects', e);
-      }
-    }
-
-    saveSubjects() {
-      try {
-        localStorage.setItem('chrono_focus_custom_subjects', JSON.stringify(this.customSubjects));
-      } catch (e) {
-        console.warn('Failed to save custom subjects', e);
-      }
-      this.renderSubjectPickers();
-      this.renderSettingsSubjects();
-    }
-
-    addSubject(name) {
-      if (!name) return;
-      name = name.trim();
-      if (!name) return;
-      const exists = this.customSubjects.some(s => s.toLowerCase() === name.toLowerCase());
-      if (!exists) {
-        this.customSubjects.push(name);
-        this.saveSubjects();
-        this.setSubject(name);
-        this.showToast(`Subject "${name}" added! ✓`);
-      } else {
-        this.setSubject(name);
-      }
-    }
-
-    removeSubject(name) {
-      if (this.customSubjects.length <= 1) {
-        this.showToast('You must have at least one subject.');
-        return;
-      }
-      this.customSubjects = this.customSubjects.filter(s => s.toLowerCase() !== name.toLowerCase());
-      if (this.activeSubject.toLowerCase() === name.toLowerCase()) {
-        this.setSubject(this.customSubjects[0]);
-      }
-      this.saveSubjects();
-      this.showToast(`Subject "${name}" removed.`);
-    }
-
-    resetSubjects() {
-      this.customSubjects = ['Overall Work', 'Math', 'Coding', 'Reading'];
-      this.saveSubjects();
-      this.setSubject('Overall Work');
-      this.showToast('Reset subjects to defaults.');
-    }
-
-    renderSubjectPickers() {
-      // 1. Update quick chips in Timer view
-      if (this.dom.quickSubjectChips) {
-        let chipsHtml = '';
-        this.customSubjects.forEach(sub => {
-          const isActive = (sub.toLowerCase() === this.activeSubject.toLowerCase());
-          chipsHtml += `<button type="button" class="chip ${isActive ? 'active' : ''}" data-name="${sub}">${sub}</button>`;
-        });
-        chipsHtml += `<button type="button" class="chip chip-add" id="btnQuickAddSubject" title="Add a custom subject">+ Add</button>`;
-        this.dom.quickSubjectChips.innerHTML = chipsHtml;
-
-        // Bind clicks
-        this.dom.quickSubjectChips.querySelectorAll('.chip:not(.chip-add)').forEach(chip => {
-          chip.addEventListener('click', () => {
-            this.setSubject(chip.dataset.name);
-          });
-        });
-
-        const quickAddBtn = document.getElementById('btnQuickAddSubject');
-        if (quickAddBtn) {
-          quickAddBtn.addEventListener('click', () => {
-            const newName = prompt('Enter new study subject name:');
-            if (newName) this.addSubject(newName);
-          });
-        }
-      }
-
-      // 2. Update datalist
-      if (this.dom.presetSubjects) {
-        this.dom.presetSubjects.innerHTML = this.customSubjects.map(s => `<option value="${s}">`).join('');
-      }
-    }
-
-    renderSettingsSubjects() {
-      if (!this.dom.settingsSubjectChips) return;
-      let html = '';
-      this.customSubjects.forEach(sub => {
-        html += `
-          <span class="subject-edit-tag">
-            <span>${sub}</span>
-            <button type="button" class="btn-remove-subject" data-name="${sub}" title="Remove subject">✕</button>
-          </span>
-        `;
-      });
-      this.dom.settingsSubjectChips.innerHTML = html;
-
-      this.dom.settingsSubjectChips.querySelectorAll('.btn-remove-subject').forEach(btn => {
-        btn.addEventListener('click', () => {
-          this.removeSubject(btn.dataset.name);
-        });
-      });
-    }
-
-    setSubject(name) {
-      if (!name) name = this.customSubjects[0] || 'Overall Work';
-      this.activeSubject = name.trim();
-      localStorage.setItem('chrono_focus_active_subject', this.activeSubject);
-      if (this.dom.activeSubjectInput) {
-        this.dom.activeSubjectInput.value = this.activeSubject;
-      }
-      if (this.dom.quickSubjectChips) {
-        this.dom.quickSubjectChips.querySelectorAll('.chip:not(.chip-add)').forEach(chip => {
-          chip.classList.toggle('active', chip.dataset.name.toLowerCase() === this.activeSubject.toLowerCase());
-        });
-      }
-    }
-
-    // --- Time Math & Formatting ---
-    getElapsedTime() {
-      if (this.running) {
-        return this.accumulatedTime + (Date.now() - this.startTime);
-      }
-      return this.accumulatedTime;
-    }
-
-    getCurrentLapTime() {
-      if (this.running) {
-        return this.accumulatedLapTime + (Date.now() - this.lapStartTime);
-      }
-      return this.accumulatedLapTime;
-    }
-
-    formatTimeParts(ms, precision = this.precision) {
-      if (ms < 0) ms = 0;
-      const totalSeconds = Math.floor(ms / 1000);
-      const hours = Math.floor(totalSeconds / 3600);
-      const minutes = Math.floor((totalSeconds % 3600) / 60);
-      const seconds = totalSeconds % 60;
-
-      const pad = (n, len = 2) => String(n).padStart(len, '0');
-
-      let millisStr = '';
-      if (precision === 3) {
-        const millis = Math.floor(ms % 1000);
-        millisStr = '.' + pad(millis, 3);
-      } else {
-        const hundredths = Math.floor((ms % 1000) / 10);
-        millisStr = '.' + pad(hundredths, 2);
-      }
-
-      const mainStr = (hours > 0 ? pad(hours) + ':' : '') + pad(minutes) + ':' + pad(seconds);
-      return { hours, minutes, seconds, mainStr, millisStr };
-    }
-
-    formatFullTime(ms, precision = this.precision) {
-      const parts = this.formatTimeParts(ms, precision);
-      return parts.mainStr + parts.millisStr;
-    }
-
-    // --- State Persistence ---
-    saveRunState() {
-      const state = {
-        running: this.running,
-        startTime: this.startTime,
-        accumulatedTime: this.accumulatedTime,
-        lapStartTime: this.lapStartTime,
-        accumulatedLapTime: this.accumulatedLapTime,
-        laps: this.laps,
-        activeSubject: this.activeSubject,
-        savedAt: Date.now()
-      };
-      try {
-        localStorage.setItem('chrono_focus_active_session', JSON.stringify(state));
-      } catch (e) {
-        console.warn('Failed to save session state', e);
-      }
-    }
-
-    restoreRunState() {
-      try {
-        const raw = localStorage.getItem('chrono_focus_active_session');
-        if (!raw) return;
-        const state = JSON.parse(raw);
-        if (!state) return;
-
-        this.accumulatedTime = state.accumulatedTime || 0;
-        this.accumulatedLapTime = state.accumulatedLapTime || 0;
-        this.laps = state.laps || [];
-        if (state.activeSubject) {
-          this.setSubject(state.activeSubject);
-        }
-
-        if (state.running && state.startTime) {
-          this.running = true;
-          this.startTime = state.startTime;
-          this.lapStartTime = state.lapStartTime || state.startTime;
-          this.startEngine();
-        }
-      } catch (e) {
-        console.warn('Failed to restore session state', e);
-      }
-    }
-
-    loadSettings() {
-      try {
-        const savedTheme = localStorage.getItem('chrono_oled_theme') || 'emerald';
-        this.setTheme(savedTheme);
-
-        const savedPrecision = parseInt(localStorage.getItem('chrono_oled_precision') || '2', 10);
-        this.setPrecision(savedPrecision);
-
-        const savedSound = localStorage.getItem('chrono_oled_sound');
-        if (savedSound !== null) {
-          this.audio.enabled = (savedSound === 'true');
-        }
-        this.updateSoundButtonUI();
-
-        // Custom subjects
-        this.loadSubjects();
-
-        const savedSubject = localStorage.getItem('chrono_focus_active_subject') || this.customSubjects[0];
-        this.setSubject(savedSubject);
-
-        // Daily Goal
-        const savedGoal = parseFloat(localStorage.getItem('chrono_focus_daily_goal_hours') || '4');
-        this.dailyGoalHours = isNaN(savedGoal) ? 4 : savedGoal;
-        if (this.dom.settingDailyGoal) {
-          this.dom.settingDailyGoal.value = String(this.dailyGoalHours);
-        }
-
-        // Week Start
-        const savedWeekStart = localStorage.getItem('chrono_focus_week_start') || 'monday';
-        this.weekStart = savedWeekStart;
-        if (this.dom.settingWeekStart) {
-          this.dom.settingWeekStart.value = this.weekStart;
-        }
-        this.viewingWeekStart = getWeekStart(new Date(), this.weekStart);
-
-        // Date Format
-        const savedDateFormat = localStorage.getItem('chrono_focus_date_format') || 'DD/MM';
-        this.dateFormat = savedDateFormat;
-        if (this.dom.settingDateFormat) {
-          this.dom.settingDateFormat.value = this.dateFormat;
-        }
-
-        // Interval Chime
-        const savedInterval = parseInt(localStorage.getItem('chrono_focus_interval_chime') || '0', 10);
-        this.intervalChimeMinutes = isNaN(savedInterval) ? 0 : savedInterval;
-        if (this.dom.settingIntervalChime) {
-          this.dom.settingIntervalChime.value = String(this.intervalChimeMinutes);
-        }
-
-        // Idle / Forgot-to-Stop Alert
-        const savedIdle = parseInt(localStorage.getItem('chrono_focus_idle_alert') || '120', 10);
-        this.idleAlertMinutes = isNaN(savedIdle) ? 120 : savedIdle;
-        if (this.dom.settingIdleAlert) {
-          this.dom.settingIdleAlert.value = String(this.idleAlertMinutes);
-        }
-
-        // Confirm End Session
-        const savedConfirm = localStorage.getItem('chrono_focus_confirm_end_session') || 'always';
-        this.confirmEndSession = savedConfirm;
-        if (this.dom.settingConfirmEndSession) {
-          this.dom.settingConfirmEndSession.value = this.confirmEndSession;
-        }
-      } catch (e) {
-        console.warn('Failed to load settings', e);
-      }
-    }
-
-    loadHistory() {
-      try {
-        const raw = localStorage.getItem('chrono_focus_study_history');
-        this.savedRuns = raw ? JSON.parse(raw) : [];
-      } catch (e) {
-        this.savedRuns = [];
-      }
-    }
-
-    saveHistory() {
-      try {
-        localStorage.setItem('chrono_focus_study_history', JSON.stringify(this.savedRuns));
-      } catch (e) {
-        console.warn('Failed to save history', e);
-      }
-    }
-
-    // --- Diary Engine & Persistence ---
-    loadDiary() {
-      try {
-        const raw = localStorage.getItem('chrono_study_diary_v1');
-        this.studyDiary = raw ? JSON.parse(raw) : {};
-      } catch (e) {
-        this.studyDiary = {};
-      }
-    }
-
-    saveDiary() {
-      try {
-        localStorage.setItem('chrono_study_diary_v1', JSON.stringify(this.studyDiary));
-      } catch (e) {
-        console.warn('Failed to save study diary', e);
-      }
-    }
-
-    logTimeToDiary(dateKey, subjectName, durationMs) {
-      if (!durationMs || durationMs <= 0) return;
-      if (!this.studyDiary[dateKey]) {
-        this.studyDiary[dateKey] = {
-          totalMs: 0,
-          subjects: {},
-          notes: ''
+    get data() { return this.store.data; }
+    get settings() { return this.data.settings; }
+    load() {
+      const raw = this.storage.getItem(C.KEY); let data;
+      if (raw) data = C.validate(JSON.parse(raw));
+      else {
+        const parse = (key, fallback) => {
+          const value = this.storage.getItem(key); return value === null ? fallback : JSON.parse(value);
         };
+        const value = (key, fallback) => this.storage.getItem(key) ?? fallback;
+        data = C.migrate({ studyDiary: parse('chrono_study_diary_v1',{}), savedRuns: parse('chrono_focus_study_history',[]),
+          customSubjects: parse('chrono_focus_custom_subjects',['Overall Work','Math','Coding','Reading']), settings: {
+            theme: value('chrono_oled_theme','emerald'), precision: Number(value('chrono_oled_precision','2')),
+            sound: value('chrono_oled_sound','true') === 'true', goal: Number(value('chrono_focus_daily_goal_hours','4')),
+            weekStart: value('chrono_focus_week_start','monday'), dateFormat: value('chrono_focus_date_format','DD/MM'),
+            chime: Number(value('chrono_focus_interval_chime','0')), idle: Number(value('chrono_focus_idle_alert','120')),
+            confirm: value('chrono_focus_confirm_end', value('chrono_focus_confirm_end_session','always'))
+          } });
+        // Original keys are intentionally retained and never rewritten by v2.
+        this.storage.setItem(C.KEY,JSON.stringify(data));
       }
-
-      const dayData = this.studyDiary[dateKey];
-      dayData.totalMs = (dayData.totalMs || 0) + durationMs;
-      if (!dayData.subjects) dayData.subjects = {};
-      dayData.subjects[subjectName] = (dayData.subjects[subjectName] || 0) + durationMs;
-
-      this.saveDiary();
-      this.renderDiaryView();
+      this.store = new C.Store(this.storage,data);
+      this.loadDraft(); this.week = this.weekStart(new Date());
     }
-
-    setupWorker() {
-      this.worker.onmessage = (e) => {
-        if (e.data && e.data.type === 'tick') {
-          if (this.running) {
-            const elapsed = this.getElapsedTime();
-            const formatted = this.formatFullTime(elapsed, 2);
-            document.title = `⏱ ${formatted} - [${this.activeSubject}] CHRONO FOCUS`;
-
-            // Check Periodic Focus Chime (Pomodoro / interval)
-            if (this.intervalChimeMinutes > 0) {
-              const intervalMs = this.intervalChimeMinutes * 60 * 1000;
-              const currentBucket = Math.floor(elapsed / intervalMs);
-              if (currentBucket > this.lastChimeBucket) {
-                this.lastChimeBucket = currentBucket;
-                this.audio.playChime();
-                this.showToast(`🔔 Focus Interval Reached (${this.intervalChimeMinutes * currentBucket}m)!`);
-              }
-            }
-
-            if (Math.random() < 0.05) {
-              this.saveRunState();
-            }
+    loadDraft() {
+      const raw = this.storage.getItem(C.DRAFT_KEY), state = raw ? JSON.parse(raw) : null;
+      this.draftRevision = state?.revision || null;
+      if (state && state.documentToken === (this.data.restoreToken || 'initial')) this.draft = C.validateDraft(state,this.data);
+      else if (this.data.restoredDraft) this.draft = C.validateDraft(this.data.restoredDraft,this.data);
+      else if (!this.data.restoreToken && !raw && this.storage.getItem('chrono_focus_active_session')) this.draft = this.migrateDraft(JSON.parse(this.storage.getItem('chrono_focus_active_session')));
+      else this.draft = C.newDraft(this.data.subjects.find(s => !s.hidden).id);
+      if (this.data.sessions.some(s => s.id === this.draft.id)) this.draft = C.newDraft(this.draft.activeSubjectId);
+      if (this.draft.running && (this.draft.startedAt > Date.now() || this.draft.needsReview)) { C.pause(this.draft); this.draft.needsReview = true; }
+      this.persistDraft();
+    }
+    migrateDraft(old) {
+      if (!old || !Number.isFinite(old.accumulatedTime) || old.accumulatedTime < 0 || !Array.isArray(old.laps)) throw new Error('The older active session needs recovery; its original data has been preserved.');
+      const active = this.data.subjects.find(s => C.normalize(s.name) === C.normalize(old.activeSubject || 'Overall Work')) || this.data.subjects[0];
+      const draft = C.newDraft(active.id);
+      const delta = old.running && Number.isFinite(old.startTime) ? Math.max(0,Date.now()-old.startTime) : 0;
+      const total = Math.round(old.accumulatedTime + delta);
+      for (const lap of [...old.laps].reverse()) {
+        if (!C.positive(Math.round(lap.duration))) throw new Error('Invalid historical draft block.');
+        const sub = this.data.subjects.find(s => C.normalize(s.name) === C.normalize(lap.subject || active.name)) || active;
+        draft.blocks.push({ duration: Math.round(lap.duration), subjectId: sub.id,
+          date: C.dateKey(new Date(Number.isFinite(lap.timestamp) ? lap.timestamp : Date.now())), legacyCredited: true });
+      }
+      const completed = draft.blocks.reduce((sum,b) => sum+b.duration,0);
+      draft.blockElapsed = Math.max(0,total-completed); draft.elapsed = completed+draft.blockElapsed;
+      draft.legacyNotice = true; draft.needsReview = true;
+      return C.validateDraft(draft,this.data);
+    }
+    persistDraft() {
+      if (this.stale || !this.draft) return false;
+      try {
+        const raw = this.storage.getItem(C.DRAFT_KEY), revision = raw ? JSON.parse(raw).revision : null;
+        if (revision !== this.draftRevision) { this.markStale(); return false; }
+        const next = C.clone(this.draft); C.checkpoint(next);
+        next.revision = C.id(); next.documentToken = this.data.restoreToken || 'initial';
+        C.validateDraft(next,this.data); this.storage.setItem(C.DRAFT_KEY,JSON.stringify(next));
+        this.draftRevision = next.revision; this.draftWriteFailed = false; this.lastCheckpoint = Date.now(); return true;
+      } catch (error) { this.draftWriteFailed = true; this.warn(`Draft could not be saved: ${error.message}. Download a backup before closing this page.`); return false; }
+    }
+    markStale() {
+      if (this.stale) return;
+      this.stale = true; C.pause(this.draft); this.renderTimer();
+      $('activeSubject').disabled = true;
+      for (const note of document.querySelectorAll('[data-note-date]')) note.readOnly = true;
+      this.warn('Another tab changed your data or draft. This tab is paused. Reload before editing.',true);
+    }
+    warn(text, reload = false) {
+      const box = $('storageWarning'); box.hidden = false; box.replaceChildren(el('span',text));
+      if (reload) { const b = button('Reload'); b.addEventListener('click',() => location.reload()); box.append(b); }
+      const active = [...document.querySelectorAll('dialog[open]')].pop();
+      if (active) { const body = active.querySelector('.dialog-body'); body.querySelector('.dialog-warning')?.remove(); const warning = el('p',text,'notice dialog-warning'); warning.setAttribute('role','alert'); body.prepend(warning); }
+    }
+    mutate(change, message, undoLabel = null, rerender = true) {
+      if (this.stale) { this.toast('Reload this tab before editing.'); return false; }
+      try {
+        if (!this.flushNotes()) return false;
+        this.store.commit(change,undoLabel); this.updateUndo();
+        if (rerender) this.renderAll(); if (message) this.toast(message); return true;
+      } catch (error) { this.warn(`Changes were not saved: ${error.message}`); return false; }
+    }
+    setupTicker() {
+      try {
+        if (location.protocol === 'file:') throw new Error('Use timestamp recovery with a local ticker for direct-file mode.');
+        this.worker = new Worker('worker.js');
+        this.worker.onmessage = () => this.tick();
+        this.worker.onerror = () => { this.worker.terminate(); this.worker = null; this.ensureFallback(); };
+        this.worker.postMessage('start');
+      } catch { this.ensureFallback(); }
+      this.startFrames();
+    }
+    startFrames() {
+      if (this.raf || !this.draft.running) return;
+      const frame = () => { this.raf = null; this.renderTimer(); if (this.draft.running) this.raf = requestAnimationFrame(frame); };
+      this.raf = requestAnimationFrame(frame);
+    }
+    ensureFallback() { if (!this.fallbackTicker) this.fallbackTicker = setInterval(() => this.tick(),1000); }
+    tick() {
+      const now = Date.now(), mono = performance.now();
+      if (this.draft.running && (now < this.lastWall || Math.abs((now-this.lastWall)-(mono-this.lastMono)) > 5000)) {
+        C.pause(this.draft,now); this.draft.needsReview = true; this.persistDraft(); this.toast('Clock change or interrupted timing detected. Review this session before saving.');
+      }
+      this.lastWall = now; this.lastMono = mono;
+      if (this.draft.running && this.settings.chime) {
+        const bucket = Math.floor(C.draftTimes(this.draft).total/(this.settings.chime*60000));
+        if (bucket > this.draft.lastChime) { this.draft.lastChime = bucket; this.tone(true); this.toast(`${bucket*this.settings.chime} minutes of study.`); }
+      }
+      if (this.draft.running && now-this.lastCheckpoint >= 5000) this.persistDraft(); this.renderTimer(); this.updateUndo();
+    }
+    tone(chime = false) {
+      if (!this.settings.sound) return;
+      try {
+        const Audio = window.AudioContext || window.webkitAudioContext; if (!Audio) return;
+        this.audio ||= new Audio(); this.audio.resume().catch(() => {});
+        const oscillator = this.audio.createOscillator(), gain = this.audio.createGain(), now = this.audio.currentTime;
+        oscillator.frequency.value = chime ? 660 : 440;
+        gain.gain.setValueAtTime(.04,now); gain.gain.exponentialRampToValueAtTime(.001,now+(chime ? .35 : .05));
+        oscillator.connect(gain); gain.connect(this.audio.destination); oscillator.start(); oscillator.stop(now+(chime ? .35 : .05));
+      } catch { /* Audio availability never affects recording. */ }
+    }
+    subjectName(id) { return this.data.subjects.find(s => s.id === id)?.name || 'Unknown subject'; }
+    subjectSelect(selected, includeHidden = false) {
+      const select = el('select');
+      for (const sub of this.data.subjects) if (!sub.hidden || includeHidden || sub.id === selected) {
+        const option = el('option',sub.name+(sub.hidden ? ' (hidden)' : '')); option.value = sub.id; select.append(option);
+      }
+      select.value = selected; return select;
+    }
+    weekStart(date) { const day = new Date(date); day.setHours(0,0,0,0); day.setDate(day.getDate()-((day.getDay()+(this.settings.weekStart === 'monday' ? 6 : 0))%7)); return day; }
+    displayDate(key) { const [,m,d] = key.split('-'); return this.settings.dateFormat === 'MM/DD' ? `${m}/${d}` : `${d}/${m}`; }
+    renderAll() {
+      document.documentElement.dataset.theme = this.settings.theme;
+      const picker = this.subjectSelect(this.draft.activeSubjectId); $('activeSubject').replaceChildren(...picker.children); $('activeSubject').value = this.draft.activeSubjectId;
+      this.renderTimer(); this.renderBlocks(); this.renderDiary(); this.renderSubjects(); this.renderHistory(); this.renderSettings();
+    }
+    renderTimer() {
+      const {total,block} = C.draftTimes(this.draft), parts = timeParts(total,this.settings.precision);
+      $('primaryTime').textContent = parts[0]; $('millisTime').textContent = parts[1]; document.body.classList.toggle('running',this.draft.running);
+      $('statusPill').textContent = this.stale ? 'Paused — reload required' : this.draft.running ? 'Studying' : total ? 'Paused' : 'Ready to study';
+      $('btnStart').textContent = this.draft.running ? 'Pause study' : total ? 'Resume study' : 'Start study';
+      $('btnStart').disabled = this.stale; $('btnLap').disabled = !this.draft.running || this.stale; $('btnReset').disabled = !total || this.stale;
+      $('blockPreview').textContent = total ? `Block ${this.draft.blocks.length+1} · ${pretty(block)} · Draft, not saved yet` : 'Blocks stay in a draft until you save.';
+      const title = this.draft.running ? `${parts[0]} · ${this.subjectName(this.draft.activeSubjectId)} · CHRONO FOCUS` : 'CHRONO FOCUS'; if (document.title !== title) document.title = title;
+    }
+    renderBlocks() {
+      const body = $('blocksBody'); body.replaceChildren(); $('blockCount').textContent = this.draft.blocks.length;
+      for (const [i,b] of this.draft.blocks.entries()) {
+        const row = el('tr'); row.append(el('td',i+1),el('td',this.subjectName(b.subjectId)),el('td',pretty(b.duration)),el('td',this.displayDate(b.date)+(b.legacyCredited ? ' · already recorded' : ''))); body.append(row);
+      }
+      if (!this.draft.blocks.length) { const row = el('tr'), cell = el('td','No completed draft blocks.'); cell.colSpan = 4; row.append(cell); body.append(row); }
+      $('copyBlocks').disabled = !this.draft.blocks.length; $('exportCsv').disabled = !this.draft.blocks.length;
+    }
+    entriesUI(entries, legacyBlocks = null) {
+      const list = el('div');
+      if (legacyBlocks) { for (const b of legacyBlocks) list.append(el('p',`${this.subjectName(b.subjectId)} · ${pretty(b.duration)}`,'muted')); return list; }
+      for (const entry of entries) {
+        const row = el('div',undefined,'entry-row'), description = el('div',undefined,'entry-description');
+        description.append(el('span',`${this.subjectName(entry.subjectId)} · ${pretty(entry.duration)}`),el('small',`${this.displayDate(entry.date)} · ${entry.source === 'legacy' ? 'Legacy daily total' : entry.source === 'sync' ? 'Synced note' : entry.source}`));
+        const actions = el('div',undefined,'row-actions'); actions.append(button('Edit','edit-entry',entry.id),button('Delete','delete-entry',entry.id,'danger')); row.append(description,actions); list.append(row);
+      }
+      if (!entries.length) list.append(el('p','No saved study entries.','muted')); return list;
+    }
+    renderDiaryIfVisible() { if (this.tab === 'diary') this.renderDiary(); }
+    renderDiary() {
+      const expanded = new Set([...$('daysList').querySelectorAll('details[open]')].map(n => n.dataset.detail));
+      const focused = document.activeElement?.dataset.noteDate;
+      const start = focused ? document.activeElement.selectionStart : null, end = focused ? document.activeElement.selectionEnd : null;
+      const days = $('daysList'); days.replaceChildren(); let weekTotal = 0; const bySubject = new Map(); let lastKey;
+      for (let i=0;i<7;i++) {
+        const date = new Date(this.week); date.setDate(date.getDate()+i); const key = C.dateKey(date); lastKey = key;
+        const {total,bySubject: subjects} = C.totals(this.data,key); weekTotal += total;
+        const card = el('article',undefined,'day-card'); card.dataset.date = key;
+        const header = el('div',undefined,'day-header'), name = el('div');
+        name.append(el('h3',date.toLocaleDateString('en',{weekday:'long'})),el('span',this.displayDate(key),'muted'));
+        if (key === C.dateKey()) name.append(el('span','TODAY','today-label')); header.append(name,el('span',pretty(total),'day-total')); card.append(header);
+        const goal = el('div',undefined,'day-goal'), progress = el('progress'); progress.max = this.settings.goal*3600000; progress.value = total; progress.setAttribute('aria-label',`Daily goal for ${key}`);
+        goal.append(progress,el('span',`${pretty(total)} / ${this.settings.goal}h goal`,'muted')); card.append(goal);
+        const badges = el('div',undefined,'day-subjects');
+        for (const [sid,ms] of subjects) {
+          const badge = el('span',`${this.subjectName(sid)} ${pretty(ms)} `), remove = button('×','clear-subject',sid);
+          remove.dataset.date = key; remove.setAttribute('aria-label',`Remove ${this.subjectName(sid)} time from ${key}`);
+          badge.append(remove); badges.append(badge); bySubject.set(sid,(bySubject.get(sid)||0)+ms);
+        } card.append(badges);
+        const note = el('textarea'); note.value = this.dirtyNotes.has(key) ? this.dirtyNotes.get(key) : this.data.notes[key] || ''; note.dataset.noteDate = key; note.setAttribute('aria-label',`Notes for ${date.toLocaleDateString('en',{weekday:'long'})} ${key}`); note.placeholder = 'Study notes, topics, or 45m Math…'; card.append(note);
+        const footer = el('div',undefined,'day-footer'), save = el('span',this.dirtyNotes.has(key) ? 'Unsaved notes' : 'Notes saved','muted'); save.dataset.saveDate = key;
+        const actions = el('details',undefined,'day-actions'); actions.dataset.detail = `actions-${key}`; actions.open = expanded.has(actions.dataset.detail);
+        const tools = el('div',undefined,'detail-tools'); tools.append(button('Add time','add-entry',key),button('Sync notes','sync-notes',key),button('Stamp summary','stamp',key),button('Clear time','clear-day',key,'danger'));
+        actions.append(el('summary','Day actions'),tools); footer.append(save,actions); card.append(footer);
+        const detail = el('details'); detail.dataset.detail = `entries-${key}`; detail.open = expanded.has(detail.dataset.detail);
+        const entries = this.data.entries.filter(e => e.date === key); detail.append(el('summary',`Entries (${entries.length})`),this.entriesUI(entries)); card.append(detail); days.append(card);
+      }
+      $('weekTitle').textContent = `${this.displayDate(C.dateKey(this.week))} – ${this.displayDate(lastKey)} · ${this.week.getFullYear()}`;
+      $('weekTotal').textContent = pretty(weekTotal); $('weekAverage').textContent = pretty(weekTotal/7);
+      const top = [...bySubject].sort((a,b) => b[1]-a[1])[0]; $('weekTop').textContent = top ? this.subjectName(top[0]) : '—';
+      if (focused) { const note = [...days.querySelectorAll('textarea')].find(n => n.dataset.noteDate === focused); if (note) { note.focus(); note.setSelectionRange(start,end); } }
+    }
+    renderSubjects() {
+      const list = $('settingsSubjects'); list.replaceChildren();
+      for (const sub of this.data.subjects.filter(s => !s.hidden)) {
+        const row = el('div',undefined,'subject-row'), actions = el('div',undefined,'row-actions'); actions.append(button('Rename','rename-subject',sub.id),button('Remove','remove-subject',sub.id)); row.append(el('span',sub.name),actions); list.append(row);
+      }
+    }
+    renderSettings() {
+      for (const key of Object.keys(C.DEFAULTS)) $('setting'+key[0].toUpperCase()+key.slice(1)).value = String(this.settings[key]);
+      $('recoveryButton').hidden = !this.storage.getItem('chrono_focus_pre_restore');
+    }
+    renderHistory() {
+      const list = $('historyList'); list.replaceChildren();
+      for (const session of this.data.sessions) {
+        const entries = this.data.entries.filter(e => e.sessionId === session.id);
+        const total = session.legacy ? session.total : entries.reduce((sum,e) => sum+e.duration,0);
+        const first = entries[0]?.subjectId || session.subjectId || this.draft.activeSubjectId;
+        const item = el('article',undefined,'history-item'); item.append(el('h3',session.legacy ? `Historical session · ${session.label || 'Unknown date'}` : new Date(session.createdAt).toLocaleString()),el('p',`${pretty(total)} · ${entries.length || session.blocks?.length || 0} blocks`));
+        if (session.legacy) item.append(el('p','Historical archive only. Its time is already represented by migrated diary totals.','muted'));
+        const details = el('details'); details.append(el('summary','View / edit entries'),this.entriesUI(entries,session.legacy ? session.blocks : null)); item.append(details);
+        const tools = el('div',undefined,'detail-tools'); tools.append(button('Start new session','new-session',first),button('Delete session','delete-session',session.id,'danger')); item.append(tools); list.append(item);
+      }
+      if (!this.data.sessions.length) list.append(el('p','Saved sessions will appear here.','muted')); $('clearHistory').disabled = !this.data.sessions.length;
+    }
+    toggleTimer() {
+      if (this.stale) return;
+      if (this.draft.running) C.pause(this.draft);
+      else { this.draft.running = true; this.draft.startedAt = Date.now(); this.lastWall = Date.now(); this.lastMono = performance.now(); this.draft.lastChime = this.settings.chime ? Math.floor(this.draft.elapsed/(this.settings.chime*60000)) : 0; }
+      this.persistDraft(); this.startFrames(); this.renderTimer(); this.tone();
+    }
+    nextBlock() { if (this.stale || !this.draft.running) return; C.closeBlock(this.draft); this.persistDraft(); this.renderBlocks(); this.tone(); this.toast('Block added to the draft.'); }
+    chooseSubject(sid) {
+      if (this.stale || sid === this.draft.activeSubjectId || !this.data.subjects.some(s => s.id === sid)) return;
+      C.closeBlock(this.draft); this.draft.activeSubjectId = sid; this.persistDraft(); this.renderAll();
+    }
+    endSession() {
+      if (this.stale || !C.draftTimes(this.draft).total) return;
+      C.pause(this.draft); C.closeBlock(this.draft); this.persistDraft(); this.renderBlocks(); this.reviewBlocks = C.clone(this.draft.blocks.filter(b => !b.legacyCredited));
+      if (this.settings.confirm === 'auto' && !this.draft.needsReview && !this.draft.legacyNotice) { this.saveSession(false); return; }
+      this.showReview();
+    }
+    showReview() {
+      $('reviewTotal').textContent = pretty(this.reviewBlocks.reduce((sum,b) => sum+b.duration,0)); const warnings = [];
+      if (this.draft.legacyNotice) warnings.push('Recovered older draft: completed blocks were already recorded by the old app. Only new or unfinished time will be saved here. Historical blocks remain in the draft log.');
+      if (this.draft.needsReview) warnings.push('Recovered or interrupted timing: verify the actual study duration.');
+      if (this.settings.idle && this.draft.elapsed > this.settings.idle*60000) warnings.push('This session exceeds your review-warning threshold. Adjust time if you forgot to pause.');
+      $('reviewWarning').textContent = warnings.join('\n'); $('reviewWarning').hidden = !warnings.length; $('adjustTotal').value = ''; $('reviewError').textContent = ''; this.renderReview(); this.open('reviewModal');
+    }
+    renderReview() {
+      $('reviewBlocks').replaceChildren(); this.reviewBlocks.forEach((block,index) => {
+        const row = el('div',undefined,'review-block'); row.append(el('h3',`Block ${index+1}`));
+        const select = this.subjectSelect(block.subjectId,true); select.dataset.reviewSubject = index;
+        const date = el('input'); date.type = 'date'; date.value = block.date; date.dataset.reviewDate = index;
+        const duration = el('input'); duration.value = durationInput(block.duration); duration.dataset.reviewDuration = index;
+        row.append(field('Subject',select),field('Date',date),field('Duration',duration)); $('reviewBlocks').append(row);
+      });
+      if (!this.reviewBlocks.length) $('reviewBlocks').append(el('p','No new time to save. Discard this recovered draft to finish.','muted'));
+    }
+    saveSession(readInputs = true) {
+      try {
+        const blocks = C.clone(this.reviewBlocks);
+        if (readInputs) {
+          blocks.forEach((b,i) => {
+            b.subjectId = document.querySelector(`[data-review-subject="${i}"]`).value; b.date = document.querySelector(`[data-review-date="${i}"]`).value; b.duration = C.duration(document.querySelector(`[data-review-duration="${i}"]`).value);
+            if (!b.duration || !C.validDate(b.date)) throw new Error('Every block needs a valid date and positive duration.');
+          });
+          if ($('adjustTotal').value.trim()) {
+            const total = C.duration($('adjustTotal').value); if (!total) throw new Error('Enter a valid whole-session duration.');
+            const values = C.allocate(total,blocks.map(b => b.duration)); blocks.forEach((b,i) => b.duration = values[i]);
           }
         }
-      };
+        if (!this.mutate(data => C.commitSession(data,this.draft.id,blocks),null)) return;
+        this.resetDraft(true); this.close('reviewModal'); this.toast('Session saved once to your notebook.');
+      } catch (error) { if (!readInputs) this.showReview(); $('reviewError').textContent = error.message; }
     }
-
-    startEngine() {
-      this.worker.postMessage({ command: 'start', interval: 35 });
-      this.startRafLoop();
-      document.body.classList.add('running');
-      this.dom.btnStart.innerHTML = '<span class="ctrl-icon">⏸</span> Pause (Break)';
-      this.dom.statusPill.textContent = `STUDYING: ${this.activeSubject.toUpperCase()}`;
-      this.dom.btnLap.disabled = false;
-      this.dom.btnSaveSession.disabled = false;
+    resetDraft(committed = false) {
+      const previous = this.draft; this.draft = C.newDraft(previous.activeSubjectId);
+      const saved = this.persistDraft();
+      if (!saved && !committed) this.draft = previous;
+      this.renderAll(); return saved;
     }
-
-    stopEngine() {
-      this.worker.postMessage({ command: 'stop' });
-      if (this.rafId) {
-        cancelAnimationFrame(this.rafId);
-        this.rafId = null;
-      }
-      document.body.classList.remove('running');
-      this.dom.btnStart.innerHTML = '<span class="ctrl-icon">▶</span> Resume Study';
-      this.dom.statusPill.textContent = this.accumulatedTime > 0 ? 'ON BREAK / PAUSED' : 'READY TO STUDY';
-      this.dom.btnLap.disabled = true;
-      document.title = 'CHRONO FOCUS - Study & Focus Timer';
-      this.saveRunState();
+    discard() { if (this.stale || !this.resetDraft()) return; this.close('reviewModal'); this.toast('Draft discarded. Saved diary totals are unchanged.'); }
+    openEntry(date, entryId = null) {
+      const entry = entryId ? this.data.entries.find(e => e.id === entryId) : null; this.entryId = entryId;
+      $('entryTitle').textContent = entry ? 'Edit study entry' : 'Add study time'; $('entryDate').value = entry?.date || date;
+      const picker = this.subjectSelect(entry?.subjectId || this.draft.activeSubjectId,true); $('entrySubject').replaceChildren(...picker.children); $('entrySubject').value = entry?.subjectId || this.draft.activeSubjectId;
+      $('entryDuration').value = entry ? durationInput(entry.duration) : ''; $('entryError').textContent = ''; this.open('entryModal'); $('entryDuration').focus();
     }
-
-    startRafLoop() {
-      if (this.rafId) cancelAnimationFrame(this.rafId);
-      const loop = () => {
-        if (!this.running) return;
-        this.render();
-        this.rafId = requestAnimationFrame(loop);
-      };
-      this.rafId = requestAnimationFrame(loop);
+    saveEntry(event) {
+      event.preventDefault(); const raw = $('entryDuration').value, direct = C.duration(raw);
+      const parsed = direct ? null : C.studyLine(raw,this.data.subjects.map(s => s.name));
+      const duration = direct || (parsed?.kind === 'entry' ? parsed.duration : null), date = $('entryDate').value;
+      let sid = $('entrySubject').value;
+      if (!duration || !C.validDate(date)) { $('entryError').textContent = 'Enter a valid date and positive duration.'; return; }
+      if (this.mutate(data => {
+        if (parsed?.kind === 'entry' && parsed.subject !== 'Overall Work') sid = C.subject(data,parsed.subject).id;
+        if (this.entryId) { const entry = data.entries.find(e => e.id === this.entryId); if (!entry) throw new Error('Entry no longer exists.'); Object.assign(entry,{duration,date,subjectId:sid}); }
+        else data.entries.push({id:C.id(),date,subjectId:sid,duration,source:'manual'});
+      },'Study entry saved.')) this.close('entryModal');
     }
-
-    toggleStartStop() {
-      this.audio.init();
-      if (!this.running) {
-        this.running = true;
-        const now = Date.now();
-        this.startTime = now;
-        this.lapStartTime = now;
-        this.lastChimeBucket = Math.floor(this.accumulatedTime / (Math.max(1, this.intervalChimeMinutes) * 60 * 1000));
-        this.startEngine();
-        this.audio.clickStart();
-      } else {
-        const now = Date.now();
-        this.accumulatedTime += (now - this.startTime);
-        this.accumulatedLapTime += (now - this.lapStartTime);
-        this.running = false;
-        this.stopEngine();
-        this.audio.clickStop();
-      }
-      this.render();
-      this.saveRunState();
+    editSubject(sid) {
+      this.renamingSubject = sid; $('renameSubjectName').value = this.subjectName(sid); $('subjectError').textContent = '';
+      this.open('subjectModal'); $('renameSubjectName').focus();
     }
-
-    recordLap() {
-      if (!this.running) return;
-      const now = Date.now();
-      const lapDuration = this.accumulatedLapTime + (now - this.lapStartTime);
-      const totalElapsed = this.accumulatedTime + (now - this.startTime);
-
-      const lapNumber = this.laps.length + 1;
-      const lapRecord = {
-        number: lapNumber,
-        duration: lapDuration,
-        totalTime: totalElapsed,
-        subject: this.activeSubject,
-        timestamp: now
-      };
-
-      this.laps.unshift(lapRecord);
-      this.lapStartTime = now;
-      this.accumulatedLapTime = 0;
-
-      // Log block to today's diary
-      const todayKey = formatDateKey(new Date());
-      this.logTimeToDiary(todayKey, this.activeSubject, lapDuration);
-
-      this.audio.clickLap();
-      this.updateLapsUI();
-      this.saveRunState();
-      this.showToast(`Block #${lapNumber} logged: ${formatDurationFriendly(lapDuration)} to ${this.activeSubject}`);
+    renameSubject(event) {
+      event.preventDefault(); const name = $('renameSubjectName').value.trim(), sid = this.renamingSubject;
+      if (!name || name.length > 100) { $('subjectError').textContent = 'Use a name between 1 and 100 characters.'; return; }
+      if (this.data.subjects.some(s => s.id !== sid && C.normalize(s.name) === C.normalize(name))) { $('subjectError').textContent = 'That subject name already exists.'; return; }
+      if (this.mutate(data => { data.subjects.find(s => s.id === sid).name = name; },null)) { this.close('subjectModal'); this.toast('Subject renamed.'); }
     }
-
-    reset() {
-      this.triggerEndSession();
+    removeSubject(sid) {
+      if (this.data.subjects.filter(s => !s.hidden).length <= 1) { this.toast('Keep at least one selectable subject.'); return; }
+      if (!this.mutate(data => { data.subjects.find(s => s.id === sid).hidden = true; },'Subject removed from selection. Its history is retained.')) return;
+      if (this.draft.activeSubjectId === sid) this.chooseSubject(this.data.subjects.find(s => !s.hidden).id);
     }
-
-    triggerEndSession() {
-      const currentTotal = this.getElapsedTime();
-      if (this.accumulatedTime === 0 && !this.running && this.laps.length === 0) return;
-
-      // Pause timer while reviewing
-      if (this.running) {
-        this.toggleStartStop();
-      }
-
-      // If very short (< 15s) and no laps, reset immediately without dialog
-      if (currentTotal < 15000 && this.laps.length === 0) {
-        this.executeResetState();
-        this.showToast('Session reset.');
-        return;
-      }
-
-      if (this.confirmEndSession === 'auto') {
-        this.confirmAndSaveSession(currentTotal);
-        return;
-      }
-
-      this.openEndSessionModal(currentTotal);
+    addSubject(name) { let sid; if (this.mutate(data => { sid = C.subject(data,name).id; },'Subject ready.')) this.chooseSubject(sid); }
+    scheduleNote(date, value) {
+      if (this.stale) return;
+      this.dirtyNotes.set(date,value); clearTimeout(this.noteTimers.get(date));
+      const label = [...document.querySelectorAll('[data-save-date]')].find(n => n.dataset.saveDate === date); if (label) label.textContent = 'Saving…';
+      this.noteTimers.set(date,setTimeout(() => this.flushNotes(),400)); this.invalidateSync(); this.updateUndo();
     }
-
-    openEndSessionModal(currentTotal) {
-      this.pendingEndSessionDuration = currentTotal;
-      const parts = this.formatTimeParts(currentTotal, this.precision);
-      this.dom.reviewSessionDuration.textContent = `${parts.mainStr}${parts.millisStr} (${formatDurationFriendly(currentTotal)})`;
-      this.dom.reviewSessionMeta.textContent = `${this.activeSubject} • ${this.laps.length > 0 ? this.laps.length : 1} block(s)`;
-
-      const isExcessive = (this.idleAlertMinutes > 0 && currentTotal > (this.idleAlertMinutes * 60 * 1000));
-      if (isExcessive) {
-        this.dom.reviewWarningBox.classList.remove('is-hidden');
-        this.dom.reviewWarningBox.innerHTML = `<span>⚠️ <strong>Forgot-to-Stop Alert:</strong> This timer has been active for <strong>${formatDurationFriendly(currentTotal)}</strong> (exceeding your ${this.idleAlertMinutes}m threshold). If you were away or forgot to stop it, adjust your actual study time below or discard it!</span>`;
-      } else {
-        this.dom.reviewWarningBox.classList.add('is-hidden');
-      }
-
-      this.dom.adjustTimeGroup.classList.add('is-hidden');
-      this.dom.adjustTimeInput.value = '';
-      this.dom.endSessionModal.classList.add('open');
-    }
-
-    closeEndSessionModal() {
-      this.dom.endSessionModal.classList.remove('open');
-    }
-
-    confirmAndSaveSession(customMs = null) {
-      let durationMs = (customMs !== null && customMs !== undefined) ? customMs : this.pendingEndSessionDuration;
-
-      // Check if user entered an adjusted time in the input box
-      if (this.dom.adjustTimeInput && this.dom.adjustTimeInput.value.trim()) {
-        const parsed = parseDurationString(this.dom.adjustTimeInput.value.trim());
-        if (parsed && parsed > 0) {
-          durationMs = parsed;
+    flushNotes() {
+      if (!this.dirtyNotes.size) return true; if (this.stale) return false;
+      try {
+        this.store.commit(data => { for (const [date,note] of this.dirtyNotes) data.notes[date] = note; });
+        for (const [date] of this.dirtyNotes) {
+          clearTimeout(this.noteTimers.get(date)); const label = [...document.querySelectorAll('[data-save-date]')].find(n => n.dataset.saveDate === date); if (label) label.textContent = 'Notes saved';
         }
-      }
-
-      if (!durationMs || durationMs <= 0) {
-        this.discardCurrentSession();
-        return;
-      }
-
-      const todayKey = formatDateKey(new Date());
-      this.logTimeToDiary(todayKey, this.activeSubject, durationMs);
-      this.archiveCurrentRun(false, durationMs);
-      this.executeResetState();
-      this.closeEndSessionModal();
-      this.showToast(`Saved ${formatDurationFriendly(durationMs)} (${this.activeSubject}) to today's diary! ✓`);
+        this.dirtyNotes.clear(); this.noteTimers.clear(); this.updateUndo(); return true;
+      } catch (error) { this.warn(`Notes are still unsaved: ${error.message}. Download a backup before closing.`); return false; }
     }
-
-    discardCurrentSession() {
-      this.executeResetState();
-      this.closeEndSessionModal();
-      this.showToast('Session discarded. Today\'s diary untouched. ✓');
+    showSync(date) {
+      if (!this.flushNotes()) return;
+      this.syncDate = date; this.syncText = this.data.notes[date] || ''; this.pendingSync = C.syncEntries(this.data,date,this.syncText); $('syncPreview').replaceChildren();
+      if (this.pendingSync.errors.length) $('syncPreview').append(el('p',this.pendingSync.errors.join('\n'),'form-error'));
+      this.previewEntries($('syncPreview'),this.pendingSync.entries,date); $('applySync').disabled = !!this.pendingSync.errors.length; this.open('syncModal');
     }
-
-    executeResetState() {
-      this.running = false;
-      this.stopEngine();
-      this.startTime = 0;
-      this.accumulatedTime = 0;
-      this.lapStartTime = 0;
-      this.accumulatedLapTime = 0;
-      this.laps = [];
-      this.lastChimeBucket = 0;
-
-      this.audio.clickReset();
-      this.render();
-      this.updateLapsUI();
-      localStorage.removeItem('chrono_focus_active_session');
-      this.dom.btnSaveSession.disabled = true;
-      this.dom.btnStart.innerHTML = '<span class="ctrl-icon">▶</span> Start Study';
+    invalidateSync() { this.pendingSync = null; $('applySync').disabled = true; }
+    applySync() {
+      if (!this.pendingSync || this.syncText !== (this.data.notes[this.syncDate] || '')) { this.toast('Notes changed. Preview again.'); return; }
+      if (this.mutate(data => C.applySync(data,this.syncDate,this.pendingSync),'Note-generated entries updated.')) this.close('syncModal');
     }
-
-    archiveCurrentRun(notify = true, customDurationMs = null) {
-      const totalTime = (customDurationMs !== null) ? customDurationMs : this.getElapsedTime();
-      if (totalTime < 500 && this.laps.length === 0) return;
-
-      const session = {
-        id: 'study_' + Date.now(),
-        date: new Date().toLocaleDateString(),
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        totalTime: totalTime,
-        subject: this.activeSubject,
-        blockCount: this.laps.length > 0 ? this.laps.length : 1,
-        laps: [...this.laps]
-      };
-
-      this.savedRuns.unshift(session);
-      if (this.savedRuns.length > 100) this.savedRuns.pop();
-      this.saveHistory();
-
-      if (notify) {
-        this.showToast('Study session archived! ✓');
+    previewEntries(container, entries, date) {
+      for (const e of entries) container.append(el('div',`${this.displayDate(date)} · ${e.subject} · ${pretty(e.duration)}`,'preview-row'));
+      if (!entries.length) container.append(el('p',`${this.displayDate(date)} · No new duration entries.`,'muted'));
+    }
+    invalidateImport() { this.pendingImport = null; $('applyImport').disabled = true; $('importPreview').textContent = 'Preview before importing.'; }
+    previewImport() {
+      this.pendingImport = C.parseImport($('importText').value,Number($('importYear').value),this.settings.dateFormat,this.data.subjects.map(s => s.name));
+      const container = $('importPreview'); container.replaceChildren();
+      if (this.pendingImport.errors.length) container.append(el('p',this.pendingImport.errors.join('\n'),'form-error'));
+      const keys = Object.keys(this.pendingImport.days); if (!keys.length) container.append(el('p','No dates found.','muted'));
+      for (const date of keys) { this.previewEntries(container,this.pendingImport.days[date].entries,date); const notes = this.pendingImport.days[date].notes.filter(line => C.studyLine(line).kind !== 'entry'); if (notes.length) container.append(el('p',notes.join(' · '),'muted')); }
+      if (this.data.imports.some(b => b.signature === this.pendingImport.signature)) container.append(el('p','Already imported. Applying again will add nothing.','muted'));
+      $('applyImport').disabled = !keys.length || !!this.pendingImport.errors.length;
+    }
+    applyImport() {
+      if (!this.pendingImport) return; let added;
+      if (this.mutate(data => { added = C.applyImport(data,this.pendingImport); },null)) {
+        const first = Object.keys(this.pendingImport.days).sort()[0]; this.week = this.weekStart(new Date(first+'T12:00:00')); this.close('importModal'); this.switchTab('diary'); this.toast(added ? 'Diary imported.' : 'Already imported; no time added.');
       }
     }
-
-    removeSubjectTimeFromDay(dayKey, subject) {
-      if (!this.studyDiary[dayKey] || !this.studyDiary[dayKey].subjects) return;
-
-      const removedMs = this.studyDiary[dayKey].subjects[subject] || 0;
-      delete this.studyDiary[dayKey].subjects[subject];
-
-      let newTotal = 0;
-      for (const ms of Object.values(this.studyDiary[dayKey].subjects)) {
-        newTotal += ms;
-      }
-      this.studyDiary[dayKey].totalMs = newTotal;
-      this.saveDiary();
-      this.renderDiaryView();
-      this.showToast(`Removed ${subject} (${formatDurationFriendly(removedMs)}) from day. ✓`);
+    backupObject() {
+      const data = C.clone(this.data); for (const [date,note] of this.dirtyNotes) data.notes[date] = note;
+      const draft = C.clone(this.draft); C.checkpoint(draft); delete data.restoredDraft;
+      return {...data,draft,exportedAt:new Date().toISOString()};
     }
-
-    clearDayStudyTime(dayKey) {
-      if (!this.studyDiary[dayKey]) return;
-      this.studyDiary[dayKey].subjects = {};
-      this.studyDiary[dayKey].totalMs = 0;
-      this.saveDiary();
-      this.renderDiaryView();
-      this.showToast('All study hours cleared for day. ✓');
+    download(name,text,type = 'text/plain') {
+      const url = URL.createObjectURL(new Blob([text],{type})), link = el('a'); link.href = url; link.download = name; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url),1000);
     }
-
-    render() {
-      const elapsed = this.getElapsedTime();
-      const parts = this.formatTimeParts(elapsed, this.precision);
-
-      this.dom.primaryTime.textContent = parts.mainStr;
-      this.dom.millisTime.textContent = parts.millisStr;
-
-      // Update Live Study Metrics
-      this.dom.statTotalStudy.textContent = this.formatFullTime(elapsed, this.precision);
-
-      const currentBlockMs = this.getCurrentLapTime();
-      this.dom.statCurrentBlock.textContent = (this.running || this.accumulatedLapTime > 0)
-        ? this.formatFullTime(currentBlockMs, this.precision)
-        : '--:--.--';
-
-      if (this.running || this.laps.length > 0) {
-        this.dom.currentLapPreview.style.display = 'flex';
-        this.dom.currentLapNumber.textContent = `Block ${this.laps.length + 1}`;
-        this.dom.currentLapVal.textContent = this.formatFullTime(currentBlockMs, this.precision);
-      } else {
-        this.dom.currentLapPreview.style.display = 'none';
-      }
+    async readBackup(file) {
+      if (!file) return;
+      if (C.draftTimes(this.draft).total || this.dirtyNotes.size) { this.toast('Save or discard the active session and save your notes before restoring.'); return; }
+      try {
+        this.pendingRestore = C.backup(JSON.parse(await file.text())); const pending = this.pendingRestore;
+        if (pending.draft) { C.pause(pending.draft); pending.draft.needsReview ||= pending.draft.elapsed > 0; }
+        const data = pending.data;
+        $('restorePreview').textContent = `${data.entries.length} study entries, ${data.sessions.length} sessions, ${Object.keys(data.notes).length} notebook days, ${data.subjects.length} subjects${pending.draft?.elapsed ? ', plus a paused draft' : ''}.`;
+        $('restoreError').textContent = ''; this.close('settingsModal'); this.open('restoreModal');
+      } catch (error) { this.toast(`Backup not restored: ${error.message}`); }
     }
-
-    updateLapsUI() {
-      const laps = this.laps;
-      this.dom.lapsCountBadge.textContent = laps.length;
-      this.dom.statTotalBlocks.textContent = laps.length;
-
-      if (laps.length === 0) {
-        this.dom.lapsTableBody.innerHTML = `
-          <tr>
-            <td colspan="4" class="empty-laps">No study blocks logged yet. Press "Next Block" (or tap 'L') as you finish chapters or topics.</td>
-          </tr>
-        `;
-        this.dom.statAvgBlock.textContent = '--:--.--';
-        this.dom.btnCopyLaps.disabled = true;
-        this.dom.btnExportCsv.disabled = true;
-        return;
-      }
-
-      this.dom.btnCopyLaps.disabled = false;
-      this.dom.btnExportCsv.disabled = false;
-
-      let sumDuration = 0;
-      for (let i = 0; i < laps.length; i++) {
-        sumDuration += laps[i].duration;
-      }
-      const avgDuration = Math.round(sumDuration / laps.length);
-      this.dom.statAvgBlock.textContent = this.formatFullTime(avgDuration, 2);
-
-      let html = '';
-      for (let i = 0; i < laps.length; i++) {
-        const lap = laps[i];
-        const subjectTag = lap.subject ? `<span style="color:var(--text-muted); font-size:0.75rem;">[${lap.subject}]</span> ` : '';
-        html += `
-          <tr>
-            <td><strong style="color:var(--accent-color);">Block #${lap.number}</strong> ${subjectTag}</td>
-            <td><strong>${this.formatFullTime(lap.duration, this.precision)}</strong> <span style="color:var(--text-muted); font-size:0.75rem;">(${formatDurationFriendly(lap.duration)})</span></td>
-            <td>${this.formatFullTime(lap.totalTime, this.precision)}</td>
-            <td style="color:var(--text-muted); font-size:0.75rem;">${new Date(lap.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
-          </tr>
-        `;
-      }
-
-      this.dom.lapsTableBody.innerHTML = html;
-    }
-
-    // --- Weekly Study Notebook Renderer ---
-    renderDiaryView() {
-      const weekStart = new Date(this.viewingWeekStart);
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekStart.getDate() + 6);
-
-      const startStr = formatDisplayDate(weekStart, this.dateFormat);
-      const endStr = formatDisplayDate(weekEnd, this.dateFormat);
-      this.dom.weekRangeTitle.textContent = `Week of ${startStr} - ${endStr}`;
-
-      const dayNames = this.weekStart === 'sunday'
-        ? ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-        : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-
-      const todayKey = formatDateKey(new Date());
-      const dailyGoalMs = this.dailyGoalHours * 3600 * 1000;
-
-      let weekTotalMs = 0;
-      const subjectTotals = {};
-      let html = '';
-
-      for (let i = 0; i < 7; i++) {
-        const currentDayDate = new Date(weekStart);
-        currentDayDate.setDate(weekStart.getDate() + i);
-        const dayKey = formatDateKey(currentDayDate);
-        const dayDisplay = formatDisplayDate(currentDayDate, this.dateFormat);
-        const dayName = dayNames[i];
-        const isToday = (dayKey === todayKey);
-
-        const dayEntry = this.studyDiary[dayKey] || { totalMs: 0, subjects: {}, notes: '' };
-        const dayTotalMs = dayEntry.totalMs || 0;
-        weekTotalMs += dayTotalMs;
-
-        // Subject totals
-        if (dayEntry.subjects) {
-          for (const [sub, ms] of Object.entries(dayEntry.subjects)) {
-            subjectTotals[sub] = (subjectTotals[sub] || 0) + ms;
-          }
-        }
-
-        // Subjects badges HTML with individual delete button
-        let subjectsHtml = '';
-        if (dayEntry.subjects && Object.keys(dayEntry.subjects).length > 0) {
-          for (const [sub, ms] of Object.entries(dayEntry.subjects)) {
-            if (ms > 0) {
-              subjectsHtml += `
-                <span class="subject-badge" title="Logged under ${sub}">
-                  <span>${sub}: <strong>${formatDurationFriendly(ms)}</strong></span>
-                  <button class="badge-delete-btn" data-daykey="${dayKey}" data-subject="${sub}" title="Delete ${sub} hours from this day">✕</button>
-                </span>
-              `;
-            }
-          }
-        } else {
-          subjectsHtml = `<span class="empty-subjects-hint">No subjects logged yet</span>`;
-        }
-
-        // Goal completion percentage
-        const goalPct = Math.min(100, Math.round((dayTotalMs / dailyGoalMs) * 100));
-        const goalAchieved = (dayTotalMs >= dailyGoalMs && dailyGoalMs > 0);
-
-        const notesVal = dayEntry.notes || '';
-
-        html += `
-          <div class="day-notebook-card ${isToday ? 'is-today' : ''}" data-daykey="${dayKey}">
-            <div class="day-card-header">
-              <div class="day-identity">
-                <span class="day-name">${dayName}</span>
-                <span class="day-date">${dayDisplay}</span>
-                ${isToday ? '<span class="today-pill">TODAY</span>' : ''}
-              </div>
-              <div class="day-totals-wrap">
-                <span class="day-time-badge">${formatDurationFriendly(dayTotalMs)}</span>
-                ${dayTotalMs > 0 ? `<button class="btn-tiny btn-clear-day" data-daykey="${dayKey}" data-daylabel="${dayName} (${dayDisplay})" title="Clear all study hours for this day">✕ Clear</button>` : ''}
-                <button class="btn-tiny btn-open-manual-time" data-daykey="${dayKey}" data-daylabel="${dayName} (${dayDisplay})" title="Add offline study hours">
-                  + Add Time
-                </button>
-              </div>
-            </div>
-
-            <!-- Daily Study Goal Bar -->
-            <div class="day-goal-container">
-              <div class="day-goal-bar">
-                <div class="day-goal-fill ${goalAchieved ? 'completed' : ''}" style="width: ${goalPct}%;"></div>
-              </div>
-              <span>${goalAchieved ? '✓ Goal Met (' + formatDurationFriendly(dayTotalMs) + ')' : formatDurationFriendly(dayTotalMs) + ' / ' + this.dailyGoalHours + 'h Goal (' + goalPct + '%)'}</span>
-            </div>
-
-            <div class="day-subjects-row">
-              ${subjectsHtml}
-            </div>
-
-            <div class="notebook-textarea-wrap">
-              <textarea class="notebook-textarea" data-daykey="${dayKey}" placeholder="Notes for ${dayName} ${dayDisplay}: e.g. 120 dk diff, 70 dk molbio, topics covered, problem sets...">${notesVal}</textarea>
-            </div>
-
-            <div class="notebook-footer">
-              <span class="auto-save-indicator" id="saveIndicator_${dayKey}">Auto-saved ✓</span>
-              <div class="notebook-quick-actions">
-                <button class="btn-tiny btn-sync-notes" data-daykey="${dayKey}" title="Parse note lines like '120 dk diff' or '70 dk molbio' into logged study hours">
-                  ⚡ Sync Note
-                </button>
-                <button class="btn-tiny btn-stamp-stats" data-daykey="${dayKey}" data-dayname="${dayName}" data-daydate="${dayDisplay}" title="Insert summary of today's study hours into notes">
-                  + Stamp Hours
-                </button>
-              </div>
-            </div>
-          </div>
-        `;
-      }
-
-      this.dom.notebookDaysList.innerHTML = html;
-
-      // Update Week Summary Ribbon
-      this.dom.weekTotalTime.textContent = formatDurationFriendly(weekTotalMs);
-      const avgMs = Math.round(weekTotalMs / 7);
-      this.dom.weekDailyAvg.textContent = formatDurationFriendly(avgMs);
-
-      // Find top subject
-      let topSub = 'None';
-      let maxSubMs = 0;
-      for (const [sub, ms] of Object.entries(subjectTotals)) {
-        if (ms > maxSubMs) {
-          maxSubMs = ms;
-          topSub = `${sub} (${formatDurationFriendly(ms)})`;
-        }
-      }
-      this.dom.weekTopSubject.textContent = topSub;
-
-      // Bind textarea autosave
-      this.dom.notebookDaysList.querySelectorAll('.notebook-textarea').forEach(textarea => {
-        textarea.addEventListener('input', (e) => {
-          const key = e.target.dataset.daykey;
-          if (!this.studyDiary[key]) {
-            this.studyDiary[key] = { totalMs: 0, subjects: {}, notes: '' };
-          }
-          this.studyDiary[key].notes = e.target.value;
-          this.saveDiary();
-
-          const indicator = document.getElementById(`saveIndicator_${key}`);
-          if (indicator) {
-            indicator.textContent = 'Saving...';
-            clearTimeout(indicator.timer);
-            indicator.timer = setTimeout(() => {
-              indicator.textContent = 'Saved ✓';
-            }, 600);
-          }
+    confirmRestore() {
+      if (!this.pendingRestore) return;
+      if (C.draftTimes(this.draft).total || this.dirtyNotes.size || this.stale) { $('restoreError').textContent = 'Resolve the active session or reload changed data before restoring.'; return; }
+      try {
+        const pending = this.pendingRestore; this.storage.setItem('chrono_focus_pre_restore',JSON.stringify(this.backupObject()));
+        this.store.commit(data => {
+          for (const key of Object.keys(data)) delete data[key];
+          Object.assign(data,C.clone(pending.data),{restoreToken:C.id(),restoredDraft:pending.draft});
         });
-      });
-
-      // Bind Stamp Stats Button
-      this.dom.notebookDaysList.querySelectorAll('.btn-stamp-stats').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          const key = e.currentTarget.dataset.daykey;
-          const name = e.currentTarget.dataset.dayname;
-          const date = e.currentTarget.dataset.daydate;
-          const entry = this.studyDiary[key] || { totalMs: 0, subjects: {}, notes: '' };
-
-          let stamp = `\n[${name} ${date} - Total Study: ${formatDurationFriendly(entry.totalMs)}]`;
-          if (entry.subjects && Object.keys(entry.subjects).length > 0) {
-            const parts = Object.entries(entry.subjects).map(([s, ms]) => `${s}: ${formatDurationFriendly(ms)}`);
-            stamp += ` (${parts.join(', ')})`;
-          }
-          stamp += '\n';
-
-          const textarea = this.dom.notebookDaysList.querySelector(`.notebook-textarea[data-daykey="${key}"]`);
-          if (textarea) {
-            textarea.value = (textarea.value.trim() ? textarea.value + '\n' : '') + stamp;
-            if (!this.studyDiary[key]) this.studyDiary[key] = { totalMs: 0, subjects: {}, notes: '' };
-            this.studyDiary[key].notes = textarea.value;
-            this.saveDiary();
-            this.showToast(`Study stats stamped into ${name}'s notes.`);
-          }
+        this.loadDraft(); this.week = this.weekStart(new Date()); this.updateUndo(); this.renderAll(); this.close('restoreModal'); this.pendingRestore = null; this.toast('Backup restored. Previous data is available in Preferences.');
+      } catch (error) { $('restoreError').textContent = `Restore did not complete: ${error.message}`; }
+    }
+    updateUndo() {
+      const available = this.store.undo && Date.now() <= this.store.undo.until && !this.dirtyNotes.size && !this.stale;
+      $('undoBar').hidden = !available; if (available) { $('undoLabel').textContent = this.store.undo.label; $('toast').hidden = true; }
+    }
+    undo() { try { this.store.undoLast(); this.updateUndo(); this.renderAll(); this.toast('Deletion undone.'); } catch (error) { this.toast(error.message); } }
+    switchTab(tab) {
+      if (!this.flushNotes()) return; if (tab === 'diary' && this.focusMode) this.toggleFocus(); this.tab = tab;
+      for (const name of ['timer','diary']) { const selected = name === tab, title = name[0].toUpperCase()+name.slice(1); $('view'+title).hidden = !selected; $('tab'+title).setAttribute('aria-selected',String(selected)); $('tab'+title).tabIndex = selected ? 0 : -1; }
+      if (tab === 'diary') this.renderDiary();
+    }
+    toggleFocus() {
+      if (!this.focusMode && this.tab !== 'timer') this.switchTab('timer'); this.focusMode = !this.focusMode; document.body.classList.toggle('focus-view',this.focusMode);
+      $('focusToggle').textContent = this.focusMode ? 'Exit focus view' : 'Focus view'; $('focusToggle').setAttribute('aria-pressed',String(this.focusMode));
+    }
+    open(id) { if (!this.flushNotes()) return; const dialog = $(id); if (!dialog.open) { dialog.returnFocus = document.activeElement; dialog.showModal(); } }
+    close(id) {
+      const dialog = $(id); if (!dialog.open) return; dialog.close();
+      if (dialog.returnFocus?.isConnected) dialog.returnFocus.focus();
+      else {
+        const parent = [...document.querySelectorAll('dialog[open]')].pop();
+        (parent?.querySelector('button') || $(this.tab === 'timer' ? 'tabTimer' : 'tabDiary')).focus();
+      }
+    }
+    toast(text) {
+      const active = [...document.querySelectorAll('dialog[open]')].pop();
+      if (active) {
+        let status = active.querySelector('.dialog-status');
+        if (!status) { status = el('p',undefined,'muted dialog-status'); status.setAttribute('role','status'); active.querySelector('.dialog-body').prepend(status); }
+        status.textContent = text;
+      }
+      $('toast').textContent = text; $('toast').hidden = false; clearTimeout(this.toastTimer); this.toastTimer = setTimeout(() => $('toast').hidden = true,5000);
+    }
+    async copy(text) { try { await navigator.clipboard.writeText(text); this.toast('Copied.'); } catch { this.download('chrono-copy.txt',text); this.toast('Clipboard unavailable. Downloaded text instead.'); } }
+    blocksText(csv = false) {
+      const escape = text => '"'+String(text).replace(/"/g,'""')+'"';
+      const rows = this.draft.blocks.map((b,i) => csv ? [i+1,this.subjectName(b.subjectId),b.duration,b.date].map(escape).join(',') : `${i+1}. ${this.subjectName(b.subjectId)} · ${pretty(b.duration)} · ${b.date}`);
+      return (csv ? 'Block,Subject,DurationMs,Date\n' : 'Draft study blocks\n')+rows.join('\n');
+    }
+    weekText() {
+      const lines = ['# Study week'];
+      for (let i=0;i<7;i++) { const date = new Date(this.week); date.setDate(date.getDate()+i); const key = C.dateKey(date), totals = C.totals(this.data,key); lines.push('',`## ${date.toLocaleDateString('en',{weekday:'long'})} ${key}`,`Total: ${pretty(totals.total)}`); for (const [sid,ms] of totals.bySubject) lines.push(`- ${this.subjectName(sid)}: ${pretty(ms)}`); if (this.data.notes[key]) lines.push('',this.data.notes[key]); }
+      return lines.join('\n');
+    }
+    handleAction(action,value,date) {
+      if (this.stale) { this.toast('Reload this tab before editing.'); return; }
+      switch (action) {
+        case 'add-entry': this.openEntry(value); break;
+        case 'edit-entry': this.openEntry(null,value); break;
+        case 'delete-entry': this.mutate(data => { data.entries = data.entries.filter(e => e.id !== value); },null,'Study entry deleted'); break;
+        case 'clear-day': this.mutate(data => { data.entries = data.entries.filter(e => e.date !== value); },null,'Day’s study time cleared'); break;
+        case 'clear-subject': this.mutate(data => { data.entries = data.entries.filter(e => !(e.date === date && e.subjectId === value)); },null,'Subject time removed'); break;
+        case 'rename-subject': this.editSubject(value); break;
+        case 'remove-subject': this.removeSubject(value); break;
+        case 'sync-notes': this.showSync(value); break;
+        case 'stamp': { const totals = C.totals(this.data,value), text = `[Study summary] ${[...totals.bySubject].map(([sid,ms]) => this.subjectName(sid)+': '+pretty(ms)).join('; ') || 'No study time'}`; this.mutate(data => { data.notes[value] = [data.notes[value],text].filter(Boolean).join('\n'); },'Summary added to notes.'); break; }
+        case 'delete-session': this.mutate(data => { data.sessions = data.sessions.filter(s => s.id !== value); data.entries = data.entries.filter(e => e.sessionId !== value); },null,'Session deleted'); break;
+        case 'new-session': if (C.draftTimes(this.draft).total) { this.toast('Finish the current session first.'); return; } this.chooseSubject(value); this.close('historyModal'); this.switchTab('timer'); this.toggleTimer(); break;
+      }
+    }
+    bind() {
+      const on = (id,handler,event = 'click') => $(id).addEventListener(event,handler);
+      on('btnStart',() => this.toggleTimer()); on('btnLap',() => this.nextBlock()); on('btnReset',() => this.endSession()); on('activeSubject',event => this.chooseSubject(event.target.value),'change');
+      on('quickAddSubject',() => { this.open('settingsModal'); $('subjectName').focus(); }); on('focusToggle',() => this.toggleFocus());
+      on('settingsToggle',() => { this.renderSettings(); this.open('settingsModal'); }); on('historyToggle',() => { this.renderHistory(); this.open('historyModal'); });
+      on('tabTimer',() => this.switchTab('timer')); on('tabDiary',() => this.switchTab('diary'));
+      on('prevWeek',() => { if (this.flushNotes()) { this.week.setDate(this.week.getDate()-7); this.renderDiary(); } }); on('nextWeek',() => { if (this.flushNotes()) { this.week.setDate(this.week.getDate()+7); this.renderDiary(); } }); on('todayWeek',() => { if (this.flushNotes()) { this.week = this.weekStart(new Date()); this.renderDiary(); } });
+      on('entryForm',event => this.saveEntry(event),'submit'); on('addSubjectForm',event => { event.preventDefault(); this.addSubject($('subjectName').value); $('subjectName').value = ''; },'submit');
+      on('renameSubjectForm',event => this.renameSubject(event),'submit');
+      for (const key of Object.keys(C.DEFAULTS)) {
+        const id = 'setting'+key[0].toUpperCase()+key.slice(1);
+        on(id,event => {
+          const value = event.target.value, before = this.settings.weekStart;
+          if (this.mutate(data => { data.settings[key] = typeof C.DEFAULTS[key] === 'number' ? Number(value) : typeof C.DEFAULTS[key] === 'boolean' ? value === 'true' : value; },null)) {
+            if (key === 'weekStart' && before !== value) { this.week = this.weekStart(this.week); this.renderDiary(); }
+            if (key === 'dateFormat') { this.invalidateImport(); this.invalidateSync(); }
+            if (key === 'chime') { this.draft.lastChime = Number(value) ? Math.floor(C.draftTimes(this.draft).total/(Number(value)*60000)) : 0; this.persistDraft(); }
+          } else this.renderSettings();
+        },'change');
+      }
+      on('saveSession',() => this.saveSession()); on('discardSession',() => this.discard()); on('undoButton',() => this.undo());
+      on('pasteDiary',() => { $('importYear').value = new Date().getFullYear(); this.invalidateImport(); this.open('importModal'); $('importText').focus(); });
+      on('importText',() => this.invalidateImport(),'input'); on('importYear',() => this.invalidateImport(),'input'); on('previewImport',() => this.previewImport()); on('applyImport',() => this.applyImport()); on('applySync',() => this.applySync());
+      on('backupButton',() => this.download(`chrono-backup-${C.dateKey()}.json`,JSON.stringify(this.backupObject(),null,2),'application/json'));
+      on('restoreButton',() => $('backupFile').click()); on('backupFile',event => { this.readBackup(event.target.files[0]); event.target.value = ''; },'change'); on('confirmRestore',() => this.confirmRestore());
+      on('recoveryButton',() => this.download('chrono-previous-snapshot.json',this.storage.getItem('chrono_focus_pre_restore'),'application/json'));
+      on('clearHistory',() => this.open('confirmModal'));
+      on('confirmDeleteHistory',() => { if (this.mutate(data => { data.entries = data.entries.filter(e => e.source !== 'session'); data.sessions = []; },null)) { this.close('confirmModal'); this.toast('All sessions deleted.'); } });
+      on('copyBlocks',() => this.copy(this.blocksText())); on('exportCsv',() => this.download('study-blocks.csv',this.blocksText(true),'text/csv')); on('copyWeek',() => { if (this.flushNotes()) this.copy(this.weekText()); }); on('exportWeek',() => { if (this.flushNotes()) this.download(`study-week-${C.dateKey(this.week)}.md`,this.weekText(),'text/markdown'); });
+      on('fullscreenToggle',async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); else await document.documentElement.requestFullscreen(); } catch { this.toast('Fullscreen is unavailable in this browser.'); } });
+      document.addEventListener('click',event => { const close = event.target.closest('[data-close]'); if (close) this.close(close.closest('dialog').id); const action = event.target.closest('[data-action]'); if (action) this.handleAction(action.dataset.action,action.dataset.value,action.dataset.date); });
+      document.addEventListener('input',event => { if (event.target.dataset.noteDate) this.scheduleNote(event.target.dataset.noteDate,event.target.value); });
+      for (const dialog of document.querySelectorAll('dialog')) {
+        dialog.addEventListener('cancel',event => { event.preventDefault(); this.close(dialog.id); });
+        dialog.addEventListener('click',event => { if (event.target === dialog) { const r = dialog.getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) this.close(dialog.id); } });
+        dialog.addEventListener('keydown',event => {
+          if (event.key !== 'Tab') return;
+          const nodes = [...dialog.querySelectorAll('button:not(:disabled), input:not([hidden]), select, textarea, summary')].filter(n => n.getClientRects().length), first = nodes[0], last = nodes[nodes.length-1];
+          if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
         });
-      });
-
-      // Bind Sync Notes to Hours Button
-      this.dom.notebookDaysList.querySelectorAll('.btn-sync-notes').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          const key = e.currentTarget.dataset.daykey;
-          this.syncNotesForDay(key);
-        });
-      });
-
-      // Bind Delete Subject Time Button
-      this.dom.notebookDaysList.querySelectorAll('.badge-delete-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const key = e.currentTarget.dataset.daykey;
-          const sub = e.currentTarget.dataset.subject;
-          this.removeSubjectTimeFromDay(key, sub);
-        });
-      });
-
-      // Bind Clear Day Time Button
-      this.dom.notebookDaysList.querySelectorAll('.btn-clear-day').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const key = e.currentTarget.dataset.daykey;
-          const label = e.currentTarget.dataset.daylabel;
-          if (confirm(`Clear all logged study hours for ${label}?`)) {
-            this.clearDayStudyTime(key);
-          }
-        });
-      });
-
-      // Bind Add Time Modal Trigger
-      this.dom.notebookDaysList.querySelectorAll('.btn-open-manual-time').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          const key = e.currentTarget.dataset.daykey;
-          const label = e.currentTarget.dataset.daylabel;
-          this.openManualTimeModal(key, label);
-        });
-      });
-    }
-
-    // --- Manual Time Logging Modal ---
-    openManualTimeModal(dayKey, dayLabel) {
-      this.dom.manualDayTarget.value = dayLabel;
-      this.dom.manualDayTarget.dataset.daykey = dayKey;
-      this.dom.manualSubjectInput.value = this.activeSubject;
-      this.dom.manualHoursInput.value = '';
-      this.dom.manualTimeModal.classList.add('open');
-      this.dom.manualHoursInput.focus();
-    }
-
-    closeManualTimeModal() {
-      this.dom.manualTimeModal.classList.remove('open');
-    }
-
-    handleManualTimeSubmit(e) {
-      e.preventDefault();
-      const dayKey = this.dom.manualDayTarget.dataset.daykey;
-      let subject = this.dom.manualSubjectInput.value.trim() || 'Overall Work';
-      const rawInput = this.dom.manualHoursInput.value.trim();
-
-      // Check if user entered shorthand line (e.g. "120 dk diff" or "90m molbio")
-      const parsedLine = parseStudyLine(rawInput, this.customSubjects);
-      let durationMs = 0;
-
-      if (parsedLine && !parsedLine.isRest && !parsedLine.isTextOnly && parsedLine.durationMs > 0) {
-        durationMs = parsedLine.durationMs;
-        if (parsedLine.subject && parsedLine.subject !== 'Overall Work') {
-          subject = parsedLine.subject;
-        }
-      } else {
-        durationMs = parseDurationString(rawInput);
       }
-
-      if (!durationMs || durationMs <= 0) {
-        this.showToast('Please enter a valid duration (e.g. 120 dk, 90m, 1.5h).');
-        return;
-      }
-
-      this.addSubject(subject);
-      this.logTimeToDiary(dayKey, subject, durationMs);
-      this.closeManualTimeModal();
-      this.showToast(`Added ${formatDurationFriendly(durationMs)} (${subject}) to ${this.dom.manualDayTarget.value}! ✓`);
-    }
-
-    syncNotesForDay(dayKey) {
-      const textarea = this.dom.notebookDaysList.querySelector(`.notebook-textarea[data-daykey="${dayKey}"]`);
-      if (!textarea) return;
-
-      const text = textarea.value;
-      const lines = text.split('\n');
-      let parsedCount = 0;
-      let totalAddedMs = 0;
-
-      if (!this.studyDiary[dayKey]) {
-        this.studyDiary[dayKey] = { totalMs: 0, subjects: {}, notes: text };
-      }
-
-      for (const line of lines) {
-        const res = parseStudyLine(line, this.customSubjects);
-        if (res && res.durationMs > 0) {
-          const sub = res.subject || 'Overall Work';
-          this.addSubject(sub);
-          this.studyDiary[dayKey].subjects[sub] = (this.studyDiary[dayKey].subjects[sub] || 0) + res.durationMs;
-          totalAddedMs += res.durationMs;
-          parsedCount++;
-        }
-      }
-
-      if (parsedCount > 0) {
-        let newDayTotal = 0;
-        for (const ms of Object.values(this.studyDiary[dayKey].subjects)) {
-          newDayTotal += ms;
-        }
-        this.studyDiary[dayKey].totalMs = newDayTotal;
-        this.saveDiary();
-        this.renderDiaryView();
-        this.showToast(`⚡ Synced ${parsedCount} entries (${formatDurationFriendly(totalAddedMs)}) from notes into day! ✓`);
-      } else {
-        this.showToast('No duration entries found to sync. Example format: "120 dk diff" or "90m molbio".');
-      }
-    }
-
-    // --- Multi-Day Quick-Paste Diary Modal ---
-    openQuickImportModal() {
-      const currentYear = new Date().getFullYear();
-      const years = [currentYear - 2, currentYear - 1, currentYear, currentYear + 1];
-      this.dom.importYearSelect.innerHTML = years.map(y => `<option value="${y}" ${y === currentYear ? 'selected' : ''}>${y}</option>`).join('');
-      this.dom.quickImportModal.classList.add('open');
-      this.dom.quickImportTextarea.focus();
-    }
-
-    closeQuickImportModal() {
-      this.dom.quickImportModal.classList.remove('open');
-    }
-
-    parseMultiDayNotes(rawText, defaultYear) {
-      const lines = rawText.split('\n');
-      const results = {}; // dateKey -> { dateKey, displayDate, subjects: {}, notes: [], totalMs: 0 }
-      let currentDateKey = null;
-
-      for (let rawLine of lines) {
-        const line = rawLine.trim();
-        if (!line) continue;
-
-        // Check for date line: "06/04", "07/04", "08/04/2026", "2026-04-06"
-        const dateMatch = line.match(/^(\d{1,2})[./\-](\d{1,2})(?:[./\-](\d{2,4}))?$/);
-        if (dateMatch) {
-          let d = parseInt(dateMatch[1], 10);
-          let m = parseInt(dateMatch[2], 10);
-          let y = dateMatch[3] ? parseInt(dateMatch[3], 10) : defaultYear;
-          if (y < 100) y += 2000;
-
-          let day = d;
-          let month = m;
-          if (this.dateFormat === 'MM/DD') {
-            day = m;
-            month = d;
-          }
-
-          const mm = String(month).padStart(2, '0');
-          const dd = String(day).padStart(2, '0');
-          currentDateKey = `${y}-${mm}-${dd}`;
-
-          if (!results[currentDateKey]) {
-            results[currentDateKey] = {
-              dateKey: currentDateKey,
-              displayDate: `${dd}/${mm}`,
-              subjects: {},
-              notes: [],
-              totalMs: 0
-            };
-          }
-          continue;
-        }
-
-        if (!currentDateKey) continue;
-
-        const dayObj = results[currentDateKey];
-        dayObj.notes.push(line);
-
-        const parsed = parseStudyLine(line, this.customSubjects);
-        if (parsed && parsed.durationMs > 0) {
-          const sub = parsed.subject || 'Overall Work';
-          dayObj.subjects[sub] = (dayObj.subjects[sub] || 0) + parsed.durationMs;
-          dayObj.totalMs += parsed.durationMs;
-        }
-      }
-
-      return results;
-    }
-
-    previewQuickImport() {
-      const text = this.dom.quickImportTextarea.value.trim();
-      if (!text) {
-        this.dom.importPreviewBox.innerHTML = '<span class="empty-subjects-hint">Please paste diary notes first.</span>';
-        this.dom.btnApplyImport.disabled = true;
-        return;
-      }
-
-      const year = parseInt(this.dom.importYearSelect.value, 10);
-      const parsedDays = this.parseMultiDayNotes(text, year);
-      const dayKeys = Object.keys(parsedDays).sort();
-
-      if (dayKeys.length === 0) {
-        this.dom.importPreviewBox.innerHTML = '<span class="empty-subjects-hint">No dates detected. Start entries with dates like "06/04" or "07/04".</span>';
-        this.dom.btnApplyImport.disabled = true;
-        return;
-      }
-
-      let totalDays = dayKeys.length;
-      let totalMs = 0;
-      let foundSubs = new Set();
-      let html = '';
-
-      for (const key of dayKeys) {
-        const item = parsedDays[key];
-        totalMs += item.totalMs;
-        const subsStr = Object.entries(item.subjects).map(([s, ms]) => {
-          foundSubs.add(s);
-          return `${s}: ${formatDurationFriendly(ms)}`;
-        }).join(', ');
-
-        const noteSnippet = item.notes.join(' | ');
-
-        html += `
-          <div class="import-preview-line">
-            <span><strong>${item.displayDate}</strong> (${key}): ${item.totalMs > 0 ? formatDurationFriendly(item.totalMs) : 'Rest / Notes'}</span>
-            <span>${subsStr || noteSnippet || 'No entries'}</span>
-          </div>
-        `;
-      }
-
-      this.dom.importPreviewBox.innerHTML = `
-        <div class="empty-subjects-hint">
-          ✓ Ready to import <strong>${totalDays} days</strong> (${formatDurationFriendly(totalMs)} total across ${foundSubs.size} subjects).
-        </div>
-        ${html}
-      `;
-
-      this.parsedImportCache = parsedDays;
-      this.dom.btnApplyImport.disabled = false;
-    }
-
-    applyQuickImport() {
-      if (!this.parsedImportCache || Object.keys(this.parsedImportCache).length === 0) {
-        this.showToast('Please preview notes before importing.');
-        return;
-      }
-
-      let totalDays = 0;
-      let totalMs = 0;
-      let earliestDate = null;
-
-      for (const [dateKey, item] of Object.entries(this.parsedImportCache)) {
-        if (!this.studyDiary[dateKey]) {
-          this.studyDiary[dateKey] = { totalMs: 0, subjects: {}, notes: '' };
-        }
-
-        // Merge subjects
-        for (const [sub, ms] of Object.entries(item.subjects)) {
-          this.addSubject(sub);
-          this.studyDiary[dateKey].subjects[sub] = (this.studyDiary[dateKey].subjects[sub] || 0) + ms;
-          totalMs += ms;
-        }
-
-        // Recalculate day total
-        let dayTotal = 0;
-        for (const ms of Object.values(this.studyDiary[dateKey].subjects)) {
-          dayTotal += ms;
-        }
-        this.studyDiary[dateKey].totalMs = dayTotal;
-
-        // Append notes if any
-        if (item.notes.length > 0) {
-          const notesText = item.notes.join('\n');
-          this.studyDiary[dateKey].notes = (this.studyDiary[dateKey].notes ? this.studyDiary[dateKey].notes + '\n' : '') + notesText;
-        }
-
-        totalDays++;
-
-        const curDate = new Date(dateKey + 'T00:00:00');
-        if (!earliestDate || curDate < earliestDate) {
-          earliestDate = curDate;
-        }
-      }
-
-      this.saveDiary();
-      this.saveSubjects();
-
-      if (earliestDate) {
-        this.viewingWeekStart = getWeekStart(earliestDate, this.weekStart);
-      }
-
-      this.renderDiaryView();
-      this.closeQuickImportModal();
-      this.showToast(`Imported ${totalDays} days of study diary (${formatDurationFriendly(totalMs)})! ✓`);
-    }
-
-    // --- Week Navigation ---
-    changeWeek(offsetWeeks) {
-      const start = new Date(this.viewingWeekStart);
-      start.setDate(start.getDate() + (offsetWeeks * 7));
-      this.viewingWeekStart = start;
-      this.renderDiaryView();
-    }
-
-    jumpToThisWeek() {
-      this.viewingWeekStart = getWeekStart(new Date(), this.weekStart);
-      this.renderDiaryView();
-      this.showToast('Jumped to current week.');
-    }
-
-    // --- Exports ---
-    copyWeekDiary() {
-      const weekStart = new Date(this.viewingWeekStart);
-      const dayNames = this.weekStart === 'sunday'
-        ? ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-        : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-
-      let text = `====================================================\n`;
-      text += `STUDY DIARY - WEEK OF ${formatDisplayDate(weekStart, this.dateFormat)}\n`;
-      text += `Daily Target Goal: ${this.dailyGoalHours} hours/day\n`;
-      text += `====================================================\n\n`;
-
-      for (let i = 0; i < 7; i++) {
-        const curDate = new Date(weekStart);
-        curDate.setDate(weekStart.getDate() + i);
-        const dayKey = formatDateKey(curDate);
-        const dayDisplay = formatDisplayDate(curDate, this.dateFormat);
-        const dayName = dayNames[i];
-
-        const entry = this.studyDiary[dayKey] || { totalMs: 0, subjects: {}, notes: '' };
-        text += `## ${dayName} (${dayDisplay}) - ${formatDurationFriendly(entry.totalMs)}\n`;
-
-        if (entry.subjects && Object.keys(entry.subjects).length > 0) {
-          const subs = Object.entries(entry.subjects).map(([s, ms]) => `${s}: ${formatDurationFriendly(ms)}`);
-          text += `Focus: ${subs.join(' | ')}\n`;
-        }
-
-        if (entry.notes && entry.notes.trim()) {
-          text += `Notes:\n${entry.notes.trim()}\n`;
-        } else {
-          text += `Notes: (None)\n`;
-        }
-        text += `\n----------------------------------------------------\n\n`;
-      }
-
-      navigator.clipboard.writeText(text).then(() => {
-        this.showToast('Week study diary copied to clipboard! 📋');
-      }).catch(() => {
-        this.showToast('Failed to copy to clipboard.');
+      document.querySelector('.tabs').addEventListener('keydown',event => {
+        if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+        event.preventDefault(); this.switchTab(event.key === 'Home' ? 'timer' : event.key === 'End' ? 'diary' : this.tab === 'timer' ? 'diary' : 'timer'); $(this.tab === 'timer' ? 'tabTimer' : 'tabDiary').focus();
       });
-    }
-
-    exportWeekMarkdown() {
-      const weekStart = new Date(this.viewingWeekStart);
-      const dayNames = this.weekStart === 'sunday'
-        ? ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-        : ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-
-      let md = `# Study Diary - Week of ${formatDisplayDate(weekStart, this.dateFormat)}\n\n`;
-      md += `*Daily Focus Goal: ${this.dailyGoalHours} hours*\n\n`;
-
-      for (let i = 0; i < 7; i++) {
-        const curDate = new Date(weekStart);
-        curDate.setDate(weekStart.getDate() + i);
-        const dayKey = formatDateKey(curDate);
-        const dayDisplay = formatDisplayDate(curDate, this.dateFormat);
-        const dayName = dayNames[i];
-
-        const entry = this.studyDiary[dayKey] || { totalMs: 0, subjects: {}, notes: '' };
-        md += `## ${dayName} (${dayDisplay}) - ${formatDurationFriendly(entry.totalMs)}\n\n`;
-
-        if (entry.subjects && Object.keys(entry.subjects).length > 0) {
-          md += `**Subjects:**\n`;
-          for (const [s, ms] of Object.entries(entry.subjects)) {
-            md += `- ${s}: ${formatDurationFriendly(ms)}\n`;
-          }
-          md += `\n`;
-        }
-
-        md += `**Notes & Diary:**\n`;
-        md += entry.notes && entry.notes.trim() ? `${entry.notes.trim()}\n\n` : `_No notes written._\n\n`;
-      }
-
-      const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', `study_diary_${formatDateKey(weekStart)}.md`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      this.showToast('Exported week diary as Markdown! ↓');
-    }
-
-    copyLapsToClipboard() {
-      if (this.laps.length === 0) return;
-      let text = `CHRONO FOCUS - Study Log [${this.activeSubject}]\n`;
-      text += `Total Study Time: ${formatDurationFriendly(this.getElapsedTime())}\n`;
-      text += `Completed Blocks: ${this.laps.length}\n`;
-      text += `----------------------------------------\n`;
-      text += `Block\tSubject\tBlock Duration\tTotal Study Time\n`;
-
-      const sorted = [...this.laps].reverse();
-      sorted.forEach(l => {
-        text += `Block #${l.number}\t${l.subject || this.activeSubject}\t${formatDurationFriendly(l.duration)}\t${this.formatFullTime(l.totalTime, this.precision)}\n`;
-      });
-
-      navigator.clipboard.writeText(text).then(() => {
-        this.showToast('Study log copied to clipboard! ✓');
-      }).catch(() => {
-        this.showToast('Failed to copy to clipboard.');
-      });
-    }
-
-    exportCsv() {
-      if (this.laps.length === 0) return;
-      let csv = 'BlockNumber,Subject,BlockDurationFormatted,BlockDurationMs,TotalStudyTimeFormatted,TotalStudyTimeMs,RecordedTime\n';
-      const sorted = [...this.laps].reverse();
-      sorted.forEach(l => {
-        csv += `${l.number},"${l.subject || this.activeSubject}","${formatDurationFriendly(l.duration)}",${l.duration},"${this.formatFullTime(l.totalTime, this.precision)}",${l.totalTime},"${new Date(l.timestamp).toISOString()}"\n`;
-      });
-
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', `study_blocks_${Date.now()}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      this.showToast('Exported study log as CSV. ✓');
-    }
-
-    // --- Sessions Archive Modal ---
-    renderMemoryModal() {
-      if (this.savedRuns.length === 0) {
-        this.dom.savedRunsList.innerHTML = `
-          <div style="text-align:center; padding:3rem 1rem; color:var(--text-dim); font-family:var(--font-mono);">
-            No archived stopwatch sessions in memory. Ending a study session automatically saves it here!
-          </div>
-        `;
-        return;
-      }
-
-      let html = '';
-      this.savedRuns.forEach((run, index) => {
-        html += `
-          <div class="saved-run-item" data-id="${run.id}">
-            <div class="saved-run-header">
-              <span class="saved-run-title">
-                Session #${this.savedRuns.length - index} ${run.subject ? `[${run.subject}]` : ''}
-              </span>
-              <span class="saved-run-date">${run.date} at ${run.time}</span>
-            </div>
-            <div class="saved-run-metrics">
-              <div>Total: <span class="metric-highlight">${formatDurationFriendly(run.totalTime)}</span></div>
-              <div>Blocks: <span style="color:var(--text-main); font-weight:600;">${run.blockCount || run.lapCount || 0}</span></div>
-            </div>
-            <div class="saved-run-footer">
-              <button class="btn-small btn-restore-run" data-id="${run.id}">Restore to Timer</button>
-              <button class="btn-small btn-delete-run" data-id="${run.id}" style="color:var(--color-slowest);">Delete</button>
-            </div>
-          </div>
-        `;
-      });
-
-      this.dom.savedRunsList.innerHTML = html;
-
-      this.dom.savedRunsList.querySelectorAll('.btn-delete-run').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          const id = e.currentTarget.dataset.id;
-          this.savedRuns = this.savedRuns.filter(r => r.id !== id);
-          this.saveHistory();
-          this.renderMemoryModal();
-          this.showToast('Session deleted.');
-        });
-      });
-
-      this.dom.savedRunsList.querySelectorAll('.btn-restore-run').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          const id = e.currentTarget.dataset.id;
-          const run = this.savedRuns.find(r => r.id === id);
-          if (run) {
-            this.laps = [...(run.laps || [])];
-            this.accumulatedTime = run.totalTime;
-            this.accumulatedLapTime = 0;
-            if (run.subject) this.setSubject(run.subject);
-            this.running = false;
-            this.stopEngine();
-            this.render();
-            this.updateLapsUI();
-            this.closeMemoryModal();
-            this.switchTab('timer');
-            this.showToast('Study session restored to main timer.');
-          }
-        });
-      });
-    }
-
-    openMemoryModal() {
-      this.renderMemoryModal();
-      this.dom.memoryModal.classList.add('open');
-    }
-
-    closeMemoryModal() {
-      this.dom.memoryModal.classList.remove('open');
-    }
-
-    clearAllHistory() {
-      if (confirm('Clear all archived stopwatch sessions from memory?')) {
-        this.savedRuns = [];
-        this.saveHistory();
-        this.renderMemoryModal();
-        this.showToast('All session memory cleared.');
-      }
-    }
-
-    // --- Settings Modal ---
-    openSettingsModal() {
-      this.renderSettingsSubjects();
-      this.dom.settingsModal.classList.add('open');
-    }
-
-    closeSettingsModal() {
-      this.dom.settingsModal.classList.remove('open');
-    }
-
-    exportHistoryJson() {
-      const backup = {
-        savedRuns: this.savedRuns,
-        studyDiary: this.studyDiary,
-        customSubjects: this.customSubjects,
-        dailyGoalHours: this.dailyGoalHours,
-        weekStart: this.weekStart,
-        dateFormat: this.dateFormat,
-        exportedAt: new Date().toISOString()
-      };
-      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', `study_diary_backup_${Date.now()}.json`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      this.showToast('Exported complete study backup as JSON. ✓');
-    }
-
-    // --- Preferences Settings ---
-    setPrecision(p) {
-      this.precision = p;
-      localStorage.setItem('chrono_oled_precision', String(p));
-      this.dom.precisionBtns.forEach(btn => {
-        btn.classList.toggle('active', parseInt(btn.dataset.prec, 10) === p);
-      });
-      this.render();
-      this.updateLapsUI();
-    }
-
-    setTheme(themeName) {
-      this.theme = themeName;
-      document.documentElement.setAttribute('data-theme', themeName);
-      localStorage.setItem('chrono_oled_theme', themeName);
-      this.dom.themeDots.forEach(dot => {
-        dot.classList.toggle('selected', dot.dataset.pick === themeName);
-      });
-    }
-
-    toggleSound() {
-      this.audio.enabled = !this.audio.enabled;
-      localStorage.setItem('chrono_oled_sound', String(this.audio.enabled));
-      this.updateSoundButtonUI();
-      if (this.audio.enabled) {
-        this.audio.clickStart();
-        this.showToast('Audio feedback enabled.');
-      } else {
-        this.showToast('Audio muted.');
-      }
-    }
-
-    updateSoundButtonUI() {
-      this.dom.soundToggleBtn.classList.toggle('active', this.audio.enabled);
-      this.dom.soundToggleBtn.innerHTML = this.audio.enabled ? '🔊' : '🔇';
-    }
-
-    toggleFullscreen() {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(() => {});
-      } else {
-        if (document.exitFullscreen) {
-          document.exitFullscreen().catch(() => {});
-        }
-      }
-    }
-
-    showToast(message) {
-      this.dom.toast.textContent = message;
-      this.dom.toast.classList.add('show');
-      clearTimeout(this.toastTimer);
-      this.toastTimer = setTimeout(() => {
-        this.dom.toast.classList.remove('show');
-      }, 2400);
-    }
-
-    // --- Event Bindings ---
-    bindEvents() {
-      // Tabs
-      this.dom.tabTimer.addEventListener('click', () => this.switchTab('timer'));
-      this.dom.tabDiary.addEventListener('click', () => this.switchTab('diary'));
-
-      // Active Subject Input
-      this.dom.activeSubjectInput.addEventListener('change', (e) => {
-        const val = e.target.value.trim();
-        if (val) {
-          this.addSubject(val);
-        }
-      });
-
-      // Primary Controls
-      this.dom.btnStart.addEventListener('click', () => this.toggleStartStop());
-      this.dom.btnLap.addEventListener('click', () => this.recordLap());
-      this.dom.btnReset.addEventListener('click', () => this.reset());
-      this.dom.btnSaveSession.addEventListener('click', () => this.archiveCurrentRun(true));
-
-      // Header tools
-      this.dom.soundToggleBtn.addEventListener('click', () => this.toggleSound());
-      this.dom.fullscreenToggleBtn.addEventListener('click', () => this.toggleFullscreen());
-      this.dom.historyToggleBtn.addEventListener('click', () => this.openMemoryModal());
-      this.dom.memoryCloseBtn.addEventListener('click', () => this.closeMemoryModal());
-      this.dom.memoryModal.addEventListener('click', (e) => {
-        if (e.target === this.dom.memoryModal) this.closeMemoryModal();
-      });
-
-      this.dom.settingsToggleBtn.addEventListener('click', () => this.openSettingsModal());
-      this.dom.settingsCloseBtn.addEventListener('click', () => this.closeSettingsModal());
-      this.dom.settingsDoneBtn.addEventListener('click', () => this.closeSettingsModal());
-      this.dom.settingsModal.addEventListener('click', (e) => {
-        if (e.target === this.dom.settingsModal) this.closeSettingsModal();
-      });
-
-      // Add Subject Form in Settings
-      this.dom.addSubjectForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const val = this.dom.newSubjectInput.value.trim();
-        if (val) {
-          this.addSubject(val);
-          this.dom.newSubjectInput.value = '';
-        }
-      });
-      this.dom.btnResetSubjects.addEventListener('click', () => this.resetSubjects());
-
-      // Settings dropdowns
-      this.dom.settingDailyGoal.addEventListener('change', (e) => {
-        this.dailyGoalHours = parseFloat(e.target.value);
-        localStorage.setItem('chrono_focus_daily_goal_hours', String(this.dailyGoalHours));
-        this.renderDiaryView();
-        this.showToast(`Daily study goal updated to ${this.dailyGoalHours} hours.`);
-      });
-
-      this.dom.settingWeekStart.addEventListener('change', (e) => {
-        this.weekStart = e.target.value;
-        localStorage.setItem('chrono_focus_week_start', this.weekStart);
-        this.viewingWeekStart = getWeekStart(new Date(), this.weekStart);
-        this.renderDiaryView();
-        this.showToast(`Week start set to ${this.weekStart.toUpperCase()}.`);
-      });
-
-      this.dom.settingDateFormat.addEventListener('change', (e) => {
-        this.dateFormat = e.target.value;
-        localStorage.setItem('chrono_focus_date_format', this.dateFormat);
-        this.updateDateBadges();
-        this.renderDiaryView();
-        this.showToast(`Date format set to ${this.dateFormat}.`);
-      });
-
-      this.dom.settingIntervalChime.addEventListener('change', (e) => {
-        this.intervalChimeMinutes = parseInt(e.target.value, 10);
-        localStorage.setItem('chrono_focus_interval_chime', String(this.intervalChimeMinutes));
-        if (this.intervalChimeMinutes > 0) {
-          this.audio.playChime();
-          this.showToast(`Focus chime set to every ${this.intervalChimeMinutes} minutes!`);
-        } else {
-          this.showToast('Periodic chime disabled.');
-        }
-      });
-
-      this.dom.settingIdleAlert.addEventListener('change', (e) => {
-        this.idleAlertMinutes = parseInt(e.target.value, 10);
-        localStorage.setItem('chrono_focus_idle_alert', String(this.idleAlertMinutes));
-        this.showToast(this.idleAlertMinutes > 0 ? `Forgot-to-stop alert set to ${this.idleAlertMinutes}m.` : 'Idle alert disabled.');
-      });
-
-      this.dom.settingConfirmEndSession.addEventListener('change', (e) => {
-        this.confirmEndSession = e.target.value;
-        localStorage.setItem('chrono_focus_confirm_end', this.confirmEndSession);
-        this.showToast(this.confirmEndSession === 'always' ? 'Always review sessions before logging.' : 'Sessions under idle limit auto-save on reset.');
-      });
-
-      // End Session Review Modal events
-      this.dom.endSessionCloseBtn.addEventListener('click', () => this.closeEndSessionModal());
-      this.dom.endSessionModal.addEventListener('click', (e) => {
-        if (e.target === this.dom.endSessionModal) this.closeEndSessionModal();
-      });
-      this.dom.btnConfirmSaveSession.addEventListener('click', () => this.confirmAndSaveSession());
-      this.dom.btnToggleAdjustTime.addEventListener('click', () => {
-        const isHidden = this.dom.adjustTimeGroup.classList.contains('is-hidden');
-        this.dom.adjustTimeGroup.classList.toggle('is-hidden', !isHidden);
-        if (!this.dom.adjustTimeGroup.classList.contains('is-hidden')) {
-          this.dom.adjustTimeInput.focus();
-        }
-      });
-      this.dom.btnDiscardSession.addEventListener('click', () => this.discardCurrentSession());
-
-      this.dom.btnClearAllHistory.addEventListener('click', () => this.clearAllHistory());
-      this.dom.btnExportJson.addEventListener('click', () => this.exportHistoryJson());
-
-      // Laps actions
-      this.dom.btnCopyLaps.addEventListener('click', () => this.copyLapsToClipboard());
-      this.dom.btnExportCsv.addEventListener('click', () => this.exportCsv());
-
-      // Diary controls
-      this.dom.btnPrevWeek.addEventListener('click', () => this.changeWeek(-1));
-      this.dom.btnNextWeek.addEventListener('click', () => this.changeWeek(1));
-      this.dom.btnJumpToday.addEventListener('click', () => this.jumpToThisWeek());
-      this.dom.btnCopyWeekDiary.addEventListener('click', () => this.copyWeekDiary());
-      this.dom.btnExportWeekMd.addEventListener('click', () => this.exportWeekMarkdown());
-      this.dom.btnOpenQuickImport.addEventListener('click', () => this.openQuickImportModal());
-
-      // Quick Import Modal events
-      this.dom.quickImportCloseBtn.addEventListener('click', () => this.closeQuickImportModal());
-      this.dom.quickImportModal.addEventListener('click', (e) => {
-        if (e.target === this.dom.quickImportModal) this.closeQuickImportModal();
-      });
-      this.dom.btnPreviewImport.addEventListener('click', () => this.previewQuickImport());
-      this.dom.btnApplyImport.addEventListener('click', () => this.applyQuickImport());
-
-      // Manual time modal
-      this.dom.manualTimeCloseBtn.addEventListener('click', () => this.closeManualTimeModal());
-      this.dom.manualTimeModal.addEventListener('click', (e) => {
-        if (e.target === this.dom.manualTimeModal) this.closeManualTimeModal();
-      });
-      this.dom.manualTimeForm.addEventListener('submit', (e) => this.handleManualTimeSubmit(e));
-
-      // Theme Dots
-      this.dom.themeDots.forEach(dot => {
-        dot.addEventListener('click', () => this.setTheme(dot.dataset.pick));
-      });
-
-      // Precision Buttons
-      this.dom.precisionBtns.forEach(btn => {
-        btn.addEventListener('click', () => this.setPrecision(parseInt(btn.dataset.prec, 10)));
-      });
-
-      // Keyboard Shortcuts
-      window.addEventListener('keydown', (e) => {
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
-
-        if (e.code === 'Space') {
-          e.preventDefault();
-          this.toggleStartStop();
-        } else if (e.code === 'KeyL' || e.code === 'KeyB') {
-          e.preventDefault();
-          this.recordLap();
-        } else if (e.code === 'KeyR') {
-          e.preventDefault();
-          this.reset();
-        } else if (e.code === 'KeyN') {
-          e.preventDefault();
-          this.switchTab(this.activeTab === 'timer' ? 'diary' : 'timer');
-        } else if (e.code === 'KeyP') {
-          e.preventDefault();
-          if (this.dom.settingsModal.classList.contains('open')) {
-            this.closeSettingsModal();
-          } else {
-            this.openSettingsModal();
-          }
-        } else if (e.code === 'KeyF') {
-          e.preventDefault();
-          this.toggleFullscreen();
-        } else if (e.code === 'KeyS') {
-          e.preventDefault();
-          this.toggleSound();
-        } else if (e.code === 'KeyM' || e.code === 'KeyH') {
-          e.preventDefault();
-          if (this.dom.memoryModal.classList.contains('open')) {
-            this.closeMemoryModal();
-          } else {
-            this.openMemoryModal();
-          }
-        } else if (e.code === 'Escape') {
-          this.closeMemoryModal();
-          this.closeManualTimeModal();
-          this.closeSettingsModal();
-          this.closeQuickImportModal();
-          this.closeEndSessionModal();
-        }
+      window.addEventListener('keydown',event => {
+        if (event.repeat || event.ctrlKey || event.metaKey || event.altKey || document.querySelector('dialog[open]') || event.target.closest('input,textarea,select,[contenteditable="true"]')) return;
+        if (event.code === 'Space' && event.target.closest('button,summary')) return;
+        if (event.code === 'Space') { event.preventDefault(); this.toggleTimer(); }
+        else if (event.code === 'KeyL' || event.code === 'KeyB') this.nextBlock(); else if (event.code === 'KeyR') this.endSession(); else if (event.code === 'KeyN') this.switchTab(this.tab === 'timer' ? 'diary' : 'timer'); else if (event.code === 'KeyP') this.open('settingsModal'); else if (event.code === 'KeyM' || event.code === 'KeyH') this.open('historyModal'); else if (event.code === 'KeyF') $('fullscreenToggle').click(); else if (event.code === 'KeyS') this.mutate(data => { data.settings.sound = !data.settings.sound; },null); else if (event.code === 'Digit2' || event.code === 'Digit3') this.mutate(data => { data.settings.precision = Number(event.code.slice(-1)); },null); else if (event.code === 'Escape' && this.focusMode) this.toggleFocus();
       });
     }
   }
-
+  function boot() {
+    try { window.chronoApp = new ChronoStudyApp(); }
+    catch (error) {
+      $('app').replaceChildren(el('h1','CHRONO FOCUS'),el('p',`Stored data could not be opened: ${error.message}`,'notice'),el('p','Original data has been preserved. Download it for recovery, then reload after resolving storage access or invalid records.','muted'));
+      const download = button('Download original data'); download.addEventListener('click',() => {
+        const original = {};
+        try { for (let i=0;i<localStorage.length;i++) { const key = localStorage.key(i); if (key.startsWith('chrono')) original[key] = localStorage.getItem(key); } } catch { /* Preserve whatever can be read. */ }
+        const url = URL.createObjectURL(new Blob([JSON.stringify(original,null,2)],{type:'application/json'})), a = el('a'); a.href=url; a.download='chrono-original-data.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000);
+      });
+      const reload = button('Reload'); reload.addEventListener('click',() => location.reload()); $('app').append(download,reload);
+    }
+  }
   window.ChronoStopwatch = ChronoStudyApp;
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => new ChronoStudyApp());
-  } else {
-    new ChronoStudyApp();
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',boot); else boot();
 })();

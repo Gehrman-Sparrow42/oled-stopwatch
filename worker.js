@@ -1,24 +1,11 @@
-// CHRONO OLED Background Web Worker
-// Keeps the stopwatch pulse firing even when tab is backgrounded, inactive, or minimized.
-
+// Low-frequency checkpoints and reminders. Elapsed time comes from timestamps,
+// never from tick counts; browsers may throttle or suspend this worker.
 let timerId = null;
-let intervalMs = 25; // 40Hz tick rate in worker
-
-self.onmessage = function(e) {
-  const { command, interval } = e.data || {};
-
-  if (command === 'start') {
-    if (interval) intervalMs = interval;
-    if (timerId !== null) clearInterval(timerId);
-    timerId = setInterval(() => {
-      self.postMessage({ type: 'tick', now: Date.now() });
-    }, intervalMs);
-  } else if (command === 'stop') {
-    if (timerId !== null) {
-      clearInterval(timerId);
-      timerId = null;
-    }
-  } else if (command === 'ping') {
-    self.postMessage({ type: 'pong', now: Date.now() });
+self.onmessage = function (event) {
+  if (event.data === 'start' && timerId === null) {
+    timerId = setInterval(() => self.postMessage('tick'), 1000);
+  } else if (event.data === 'stop') {
+    clearInterval(timerId);
+    timerId = null;
   }
 };

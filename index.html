@@ -1,528 +1,124 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CHRONO FOCUS - OLED Study Timer & Weekly Notebook Diary</title>
-  <meta name="description" content="True OLED black study timer and weekly notebook diary for tracking daily focus hours by subject with persistent memory.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='44' fill='%23000' stroke='%2300ff88' stroke-width='8'/><line x1='50' y1='50' x2='50' y2='25' stroke='%2300ff88' stroke-width='7' stroke-linecap='round'/><line x1='50' y1='50' x2='70' y2='50' stroke='%2300ff88' stroke-width='5' stroke-linecap='round'/></svg>">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A private OLED study timer and weekly notebook. Your records stay in this browser.">
+  <title>CHRONO FOCUS</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='44' fill='%23000' stroke='%2300ff88' stroke-width='6'/%3E%3Cpath d='M50 20v30l20 10' fill='none' stroke='%2300ff88' stroke-width='6'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-
-  <main class="app-container" id="appContainer">
-
-    <!-- Top Navigation Header -->
+  <main id="app" class="app-container">
     <header class="app-header">
-      <div class="brand">
-        <div class="brand-icon" aria-hidden="true"></div>
-        <div>
-          <h1 class="brand-title">CHRONO FOCUS</h1>
-        </div>
-        <span class="brand-badge">STUDY OLED</span>
-      </div>
-
+      <h1>CHRONO <span>FOCUS</span></h1>
       <div class="header-actions">
-        <!-- OLED Color Accent Picker -->
-        <div class="theme-picker-group" title="Select OLED Ambient Color" role="radiogroup" aria-label="Color Palette">
-          <div class="theme-dot selected" data-pick="emerald" title="Matrix Emerald" role="radio" aria-checked="true" tabindex="0"></div>
-          <div class="theme-dot" data-pick="cyan" title="Cyber Cyan" role="radio" aria-checked="false" tabindex="0"></div>
-          <div class="theme-dot" data-pick="amber" title="Solar Amber" role="radio" aria-checked="false" tabindex="0"></div>
-          <div class="theme-dot" data-pick="white" title="Pure Ghost White" role="radio" aria-checked="false" tabindex="0"></div>
-          <div class="theme-dot" data-pick="crimson" title="Crimson Red" role="radio" aria-checked="false" tabindex="0"></div>
-          <div class="theme-dot" data-pick="violet" title="Neon Violet" role="radio" aria-checked="false" tabindex="0"></div>
-        </div>
-
-        <!-- Audio Mute/Sound Toggle -->
-        <button class="icon-btn active" id="soundToggleBtn" title="Toggle Focus Audio Cues (S)" aria-label="Toggle Sound">
-          🔊
-        </button>
-
-        <!-- Fullscreen Mode Toggle -->
-        <button class="icon-btn" id="fullscreenToggleBtn" title="Toggle Fullscreen Focus Mode (F)" aria-label="Toggle Fullscreen">
-          ⛶
-        </button>
-
-        <!-- Past Sessions Archive Drawer -->
-        <button class="icon-btn" id="historyToggleBtn" title="Session Archive Drawer (M)" aria-label="View Session Archive">
-          🗂
-        </button>
-
-        <!-- Settings & Configuration Modal -->
-        <button class="icon-btn" id="settingsToggleBtn" title="Settings & Subject Manager (P)" aria-label="Open Settings">
-          ⚙
-        </button>
+        <button id="focusToggle" aria-pressed="false">Focus view</button>
+        <button id="historyToggle">Sessions</button>
+        <button id="settingsToggle">Preferences</button>
       </div>
     </header>
-
-    <!-- Top View Switcher Tabs -->
-    <nav class="view-nav-tabs" role="tablist" aria-label="View Switcher">
-      <button class="nav-tab active" id="tabTimer" role="tab" aria-selected="true" aria-controls="viewTimer">
-        ⏱ Live Study Timer
-      </button>
-      <button class="nav-tab" id="tabDiary" role="tab" aria-selected="false" aria-controls="viewDiary">
-        📓 Weekly Study Notebook
-        <span class="diary-date-badge" id="navDateBadge">05/10</span>
-      </button>
+    <div id="storageWarning" class="notice" role="alert" hidden></div>
+    <nav class="tabs" role="tablist" aria-label="Views">
+      <button id="tabTimer" role="tab" aria-selected="true" aria-controls="viewTimer">Timer</button>
+      <button id="tabDiary" role="tab" aria-selected="false" aria-controls="viewDiary" tabindex="-1">Weekly notebook</button>
     </nav>
-
-    <!-- ====================================================================
-         VIEW 1: LIVE STUDY TIMER
-         ==================================================================== -->
-    <div id="viewTimer" class="view-panel active" role="tabpanel" aria-labelledby="tabTimer">
-
-      <!-- Active Subject / Task Selector Bar -->
-      <section class="subject-picker-card" aria-label="Focus Subject">
-        <div class="subject-header">
-          <span class="subject-title">Active Subject / Task:</span>
-          <span class="subject-hint">Time logs directly to today's notebook</span>
-        </div>
-        <div class="subject-controls">
-          <input type="text" id="activeSubjectInput" class="subject-input" placeholder="e.g. Math, Coding, Reading, Overall..." value="Overall Work" list="presetSubjects">
-          <datalist id="presetSubjects">
-            <option value="Overall Work">
-            <option value="Math">
-            <option value="Coding">
-            <option value="Reading">
-            <option value="Physics">
-            <option value="Problem Set">
-          </datalist>
-          <div class="quick-chips" id="quickSubjectChips">
-            <button type="button" class="chip active" data-name="Overall Work">Overall</button>
-            <button type="button" class="chip" data-name="Math">Math</button>
-            <button type="button" class="chip" data-name="Coding">Coding</button>
-            <button type="button" class="chip" data-name="Reading">Reading</button>
-          </div>
-        </div>
-      </section>
-
-      <!-- Status & Precision Bar -->
-      <section class="status-bar" aria-label="Status Bar">
-        <div class="pulse-indicator">
-          <span class="pulse-dot" id="pulseDot" aria-hidden="true"></span>
-          <span id="statusPill">READY TO STUDY</span>
-        </div>
-
-        <div class="precision-toggle" role="group" aria-label="Timer Precision">
-          <button class="precision-btn active" data-prec="2" title="Hundredths of a second (1/100s)">.00s</button>
-          <button class="precision-btn" data-prec="3" title="Milliseconds (1/1000s)">.000s</button>
-        </div>
-      </section>
-
-      <!-- Main OLED Hero Timer Display -->
-      <section class="timer-hero" id="timerHero" aria-live="off">
-        <!-- Active Study Block Live Pill -->
-        <div class="current-lap-preview" id="currentLapPreview">
-          <span class="lap-pill" id="currentLapNumber">Block 1</span>
-          <span id="currentLapVal">00:00.00</span>
-        </div>
-
-        <!-- Massive Digital Digits -->
-        <div class="digits-container" aria-label="Study Time">
-          <span class="primary-time" id="primaryTime">00:00</span>
-          <span class="millis-time" id="millisTime">.00</span>
-        </div>
-
-        <!-- OLED Activity Visualizer -->
-        <div class="audio-visualizer" aria-hidden="true">
-          <div class="wave-bar"></div>
-          <div class="wave-bar"></div>
-          <div class="wave-bar"></div>
-          <div class="wave-bar"></div>
-          <div class="wave-bar"></div>
-        </div>
-      </section>
-
-      <!-- Primary Action Controls -->
-      <section class="controls-grid" aria-label="Study Controls">
-        <button class="btn-ctrl btn-primary-toggle" id="btnStart" aria-label="Start Study or Take Break">
-          <span class="ctrl-icon">▶</span> Start Study
-        </button>
-
-        <button class="btn-ctrl btn-lap" id="btnLap" disabled aria-label="Log Study Block or Split Interval">
-          <span class="ctrl-icon">✦</span> Next Block
-        </button>
-
-        <button class="btn-ctrl btn-reset" id="btnReset" aria-label="Finish and Save Study Session">
-          <span class="ctrl-icon">✓</span> End Session
-        </button>
-      </section>
-
-      <!-- Keyboard Shortcuts Guide -->
-      <div class="shortcuts-hint" aria-hidden="true">
-        <span><span class="kbd">Space</span> Start / Break</span>
-        <span><span class="kbd">L</span> Next Block</span>
-        <span><span class="kbd">R</span> End Session</span>
-        <span><span class="kbd">N</span> Open Notebook</span>
-        <span><span class="kbd">F</span> Fullscreen Focus</span>
+    <section id="viewTimer" role="tabpanel" aria-labelledby="tabTimer">
+      <div class="subject-picker">
+        <label for="activeSubject">Studying</label>
+        <select id="activeSubject"></select>
+        <button id="quickAddSubject" class="subtle">+ Subject</button>
       </div>
-
-      <!-- Live Performance Metrics Summary -->
-      <section class="stats-summary-card" aria-label="Study Session Metrics">
-        <div class="stat-item">
-          <span class="stat-label">Total Study Time</span>
-          <span class="stat-val highlight" id="statTotalStudy">00:00.00</span>
-        </div>
-        <div class="stat-item">
-          <span class="stat-label">Active Block</span>
-          <span class="stat-val" id="statCurrentBlock">--:--.--</span>
-        </div>
-        <div class="stat-item">
-          <span class="stat-label">Average Block</span>
-          <span class="stat-val" id="statAvgBlock">--:--.--</span>
-        </div>
-        <div class="stat-item">
-          <span class="stat-label">Blocks Logged</span>
-          <span class="stat-val" id="statTotalBlocks">0</span>
-        </div>
-      </section>
-
-      <!-- Study Blocks & Intervals Table -->
-      <section class="laps-section" aria-label="Study Blocks Log">
-        <div class="laps-header-bar">
-          <div class="laps-title">
-            <span>Study Blocks & Intervals</span>
-            <span class="laps-count-badge" id="lapsCountBadge">0</span>
-          </div>
-          <div class="laps-actions">
-            <button class="btn-small" id="btnSaveSession" disabled title="Archive this study session into memory">
-              💾 Archive Session
-            </button>
-            <button class="btn-small" id="btnCopyLaps" disabled title="Copy study blocks to clipboard">
-              📋 Copy Log
-            </button>
-            <button class="btn-small" id="btnExportCsv" disabled title="Download study log as CSV">
-              ↓ CSV
-            </button>
-          </div>
-        </div>
-
-        <div class="laps-table-container">
-          <table class="laps-table" aria-label="Study Blocks Table">
-            <thead>
-              <tr>
-                <th scope="col">Block</th>
-                <th scope="col">Block Duration</th>
-                <th scope="col">Cumulative Study Time</th>
-                <th scope="col">Time Logged</th>
-              </tr>
-            </thead>
-            <tbody id="lapsTableBody">
-              <tr>
-                <td colspan="4" class="empty-laps">No study blocks logged yet. Press "Next Block" (or tap 'L') as you finish chapters or topics.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-    </div>
-
-    <!-- ====================================================================
-         VIEW 2: WEEKLY STUDY NOTEBOOK & DIARY
-         ==================================================================== -->
-    <div id="viewDiary" class="view-panel" role="tabpanel" aria-labelledby="tabDiary">
-
-      <!-- Week Navigation Bar -->
-      <section class="week-nav-bar" aria-label="Week Navigation">
-        <button class="btn-small" id="btnPrevWeek" title="Previous Week">← Prev Week</button>
-        <div class="week-title-wrap">
-          <span class="week-title" id="weekRangeTitle">Week of 05/10 - 11/10</span>
-          <button class="btn-tiny" id="btnJumpToday">Today</button>
-        </div>
-        <button class="btn-small" id="btnNextWeek" title="Next Week">Next Week →</button>
-      </section>
-
-      <!-- Week Stats Ribbon -->
-      <section class="week-summary-card" aria-label="Week Overview">
-        <div class="week-stat">
-          <span class="stat-label">Week Total Study</span>
-          <span class="stat-val highlight" id="weekTotalTime">0h 00m</span>
-        </div>
-        <div class="week-stat">
-          <span class="stat-label">Daily Average</span>
-          <span class="stat-val" id="weekDailyAvg">0h 00m</span>
-        </div>
-        <div class="week-stat">
-          <span class="stat-label">Top Subject</span>
-          <span class="stat-val" id="weekTopSubject">None</span>
-        </div>
-        <div class="week-stat-actions">
-          <button class="btn-small" id="btnOpenQuickImport" title="Quick-paste multi-day study notes (e.g. 06/04 120 dk diff)">
-            📥 Paste Diary
-          </button>
-          <button class="btn-small" id="btnCopyWeekDiary" title="Copy entire week diary notes to clipboard">
-            📋 Copy Diary
-          </button>
-          <button class="btn-small" id="btnExportWeekMd" title="Export week notes as Markdown file">
-            ↓ Export .md
-          </button>
-        </div>
-      </section>
-
-      <!-- 7 Days Notebook Cards: Mon, Tue, Wed, Thur, Fri, Sat, Sun -->
-      <section class="notebook-days-container" id="notebookDaysList" aria-label="7 Days Notebook Pages">
-        <!-- Dynamically populated: Mon, Tue, Wed, Thur, Fri, Sat, Sun -->
-      </section>
-
-    </div>
-
+      <div class="timer-hero">
+        <p id="statusPill" class="status">Ready to study</p>
+        <div class="digits" aria-label="Elapsed study time" aria-live="off"><span id="primaryTime">00:00</span><span id="millisTime">.00</span></div>
+        <p id="blockPreview" class="muted">Blocks stay in a draft until you save.</p>
+      </div>
+      <div class="controls">
+        <button id="btnStart" class="primary">Start study</button>
+        <button id="btnLap" disabled>Next block</button>
+        <button id="btnReset" disabled>End session</button>
+      </div>
+      <div class="timer-secondary">
+        <div class="timer-tools"><span class="muted">Space start / pause · L next block · R finish</span><button id="fullscreenToggle" class="subtle">Fullscreen</button></div>
+        <details id="blocksDetails">
+          <summary>Study blocks <span id="blockCount">0</span></summary>
+          <div class="detail-tools"><button id="copyBlocks">Copy log</button><button id="exportCsv">Export CSV</button></div>
+          <div class="table-scroll"><table><caption class="sr-only">Draft study blocks</caption><thead><tr><th>Block</th><th>Subject</th><th>Duration</th><th>Completed</th></tr></thead><tbody id="blocksBody"></tbody></table></div>
+        </details>
+      </div>
+    </section>
+    <section id="viewDiary" role="tabpanel" aria-labelledby="tabDiary" hidden>
+      <div class="week-nav"><button id="prevWeek" aria-label="Previous week">←</button><div><h2 id="weekTitle"></h2><button id="todayWeek" class="subtle">This week</button></div><button id="nextWeek" aria-label="Next week">→</button></div>
+      <div class="week-summary"><div><span class="muted">Total</span><strong id="weekTotal">0m</strong></div><div><span class="muted">Daily average</span><strong id="weekAverage">0m</strong></div><div><span class="muted">Top subject</span><strong id="weekTop">—</strong></div></div>
+      <div class="notebook-tools"><button id="pasteDiary">Paste diary</button><button id="copyWeek">Copy week</button><button id="exportWeek">Export Markdown</button></div>
+      <div id="daysList"></div>
+    </section>
+    <footer class="app-footer">Private · Stored in this browser · Back up in Preferences</footer>
   </main>
-
-  <!-- Manual Add Time Modal -->
-  <div class="modal-backdrop" id="manualTimeModal" role="dialog" aria-modal="true" aria-labelledby="manualTimeTitle">
-    <div class="modal-card modal-card-sm">
-      <div class="modal-header">
-        <div class="modal-title" id="manualTimeTitle">
-          <span>+ Log Offline Study Time</span>
-        </div>
-        <button class="modal-close-btn" id="manualTimeCloseBtn" aria-label="Close Modal">✕</button>
-      </div>
-      <div class="modal-body">
-        <form id="manualTimeForm" class="add-time-form">
-          <div class="form-group">
-            <label class="form-label" for="manualDayTarget">Target Day</label>
-            <input type="text" id="manualDayTarget" class="form-input" readonly>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="manualSubjectInput">Subject / Task</label>
-            <input type="text" id="manualSubjectInput" class="form-input" placeholder="e.g. Math, Coding, Reading" value="Overall Work" required>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="manualHoursInput">Time Studied (Minutes or Hours)</label>
-            <input type="text" id="manualHoursInput" class="form-input" placeholder="e.g. 120 dk, 90m, 1.5h, 45" required>
-            <span class="modal-footer-hint">Accepts minutes (e.g. 120 dk, 90m) or hours (e.g. 1.5h)</span>
-          </div>
-          <button type="submit" class="btn-ctrl btn-primary-toggle btn-form-submit">
-            Save to Day
-          </button>
-        </form>
-      </div>
+  <div id="undoBar" class="undo-bar" role="status" hidden><span id="undoLabel"></span><button id="undoButton">Undo</button></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <dialog id="settingsModal" aria-labelledby="settingsTitle">
+    <header class="dialog-header"><h2 id="settingsTitle">Preferences</h2><button data-close aria-label="Close preferences">×</button></header>
+    <div class="dialog-body">
+      <section class="settings-section"><h3>Subjects</h3><div id="settingsSubjects"></div><form id="addSubjectForm" class="inline-form"><label for="subjectName" class="sr-only">New subject</label><input id="subjectName" maxlength="100" placeholder="New subject" required><button>Add</button></form></section>
+      <section class="settings-section"><h3>Display</h3>
+        <label class="field">Accent<select id="settingTheme"><option value="emerald">Emerald</option><option value="cyan">Cyan</option><option value="amber">Amber</option><option value="white">White</option><option value="crimson">Crimson</option><option value="violet">Violet</option></select></label>
+        <label class="field">Precision<select id="settingPrecision"><option value="2">Hundredths (.00)</option><option value="3">Milliseconds (.000)</option></select></label>
+      </section>
+      <section class="settings-section"><h3>Notebook</h3>
+        <label class="field">Daily goal<select id="settingGoal"><option value="1">1 hour</option><option value="2">2 hours</option><option value="3">3 hours</option><option value="4">4 hours</option><option value="5">5 hours</option><option value="6">6 hours</option><option value="8">8 hours</option><option value="10">10 hours</option></select></label>
+        <label class="field">Week starts<select id="settingWeekStart"><option value="monday">Monday</option><option value="sunday">Sunday</option></select></label>
+        <label class="field">Date format<select id="settingDateFormat"><option value="DD/MM">DD/MM</option><option value="MM/DD">MM/DD</option></select></label>
+      </section>
+      <section class="settings-section"><h3>Session reminders</h3>
+        <label class="field">Sound<select id="settingSound"><option value="true">On</option><option value="false">Off</option></select></label>
+        <label class="field">Interval chime<select id="settingChime"><option value="0">Off</option><option value="25">25 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="50">50 minutes</option><option value="60">60 minutes</option></select></label>
+        <label class="field">Review warning after<select id="settingIdle"><option value="0">Off</option><option value="60">60 minutes</option><option value="90">90 minutes</option><option value="120">120 minutes</option><option value="180">180 minutes</option><option value="240">240 minutes</option></select></label>
+        <label class="field">End session<select id="settingConfirm"><option value="always">Review before saving</option><option value="auto">Save immediately</option></select></label>
+      </section>
+      <section class="settings-section"><h3>Backup & recovery</h3><p class="muted">Backups include your notebook, sessions, subjects, preferences, and current draft. Restore replaces this browser’s data.</p><div class="detail-tools"><button id="backupButton">Download backup</button><button id="restoreButton">Restore backup</button><button id="recoveryButton" hidden>Previous snapshot</button></div><input id="backupFile" type="file" accept=".json,application/json" hidden></section>
     </div>
-  </div>
-
-  <!-- Session Archive Drawer Modal -->
-  <div class="modal-backdrop" id="memoryModal" role="dialog" aria-modal="true" aria-labelledby="memoryTitle">
-    <div class="modal-card">
-      <div class="modal-header">
-        <div class="modal-title" id="memoryTitle">
-          <span>🗂 Saved Stopwatch Sessions</span>
-        </div>
-        <button class="modal-close-btn" id="memoryCloseBtn" aria-label="Close Modal">✕</button>
-      </div>
-
-      <div class="modal-body">
-        <div class="saved-runs-list" id="savedRunsList">
-          <!-- Dynamically populated from localStorage -->
-        </div>
-      </div>
-
-      <div class="modal-footer">
-        <button class="btn-small" id="btnExportJson" title="Backup all study sessions as JSON">
-          ↓ Backup JSON
-        </button>
-        <button class="btn-small" id="btnClearAllHistory" title="Clear study memory database">
-          ✕ Clear All History
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Settings & Subject Manager Modal -->
-  <div class="modal-backdrop" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
-    <div class="modal-card modal-card-md">
-      <div class="modal-header">
-        <div class="modal-title" id="settingsTitle">
-          <span>⚙ Preferences & Customization</span>
-        </div>
-        <button class="modal-close-btn" id="settingsCloseBtn" aria-label="Close Settings">✕</button>
-      </div>
-
-      <div class="modal-body modal-body-spacious">
-        <!-- Manage Custom Subjects -->
-        <div class="settings-section">
-          <div class="settings-section-title">
-            <span>Manage Study Subjects</span>
-            <button class="btn-tiny" id="btnResetSubjects" title="Reset to standard defaults">Reset Defaults</button>
-          </div>
-          <div class="subject-manager-chips" id="settingsSubjectChips">
-            <!-- Dynamically populated tags with delete buttons -->
-          </div>
-          <form id="addSubjectForm" class="add-subject-inline">
-            <input type="text" id="newSubjectInput" class="settings-input settings-input-flex" placeholder="New subject (e.g. Physics, History, Gym)" required>
-            <button type="submit" class="btn-small btn-add-subject">+ Add Subject</button>
-          </form>
-        </div>
-
-        <!-- Daily Study Goal -->
-        <div class="settings-section">
-          <div class="settings-section-title">Daily Study Goal</div>
-          <div class="settings-field">
-            <label class="settings-label" for="settingDailyGoal">Target Focus Hours / Day</label>
-            <select id="settingDailyGoal" class="settings-select">
-              <option value="1">1 Hour</option>
-              <option value="2">2 Hours</option>
-              <option value="3">3 Hours</option>
-              <option value="4" selected>4 Hours</option>
-              <option value="5">5 Hours</option>
-              <option value="6">6 Hours</option>
-              <option value="8">8 Hours</option>
-              <option value="10">10 Hours</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Notebook & Calendar Preferences -->
-        <div class="settings-section">
-          <div class="settings-section-title">Notebook & Calendar Preferences</div>
-          <div class="settings-field">
-            <label class="settings-label" for="settingWeekStart">Week Starts On</label>
-            <select id="settingWeekStart" class="settings-select">
-              <option value="monday" selected>Monday (Monday - Sunday)</option>
-              <option value="sunday">Sunday (Sunday - Saturday)</option>
-            </select>
-          </div>
-          <div class="settings-field">
-            <label class="settings-label" for="settingDateFormat">Date Display Format</label>
-            <select id="settingDateFormat" class="settings-select">
-              <option value="DD/MM" selected>DD/MM (e.g. 05/10)</option>
-              <option value="MM/DD">MM/DD (e.g. 10/05)</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Interval Reminder Chimes (Pomodoro) -->
-        <div class="settings-section">
-          <div class="settings-section-title">Interval Chimes & Alerts</div>
-          <div class="settings-field">
-            <label class="settings-label" for="settingIntervalChime">Periodic Chime Alert</label>
-            <select id="settingIntervalChime" class="settings-select">
-              <option value="0" selected>Off (Continuous Stopwatch)</option>
-              <option value="25">Every 25 Minutes (Pomodoro)</option>
-              <option value="30">Every 30 Minutes</option>
-              <option value="45">Every 45 Minutes</option>
-              <option value="50">Every 50 Minutes</option>
-              <option value="60">Every 60 Minutes (1 Hour)</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Forgot to Stop / Idle Protection -->
-        <div class="settings-section">
-          <div class="settings-section-title">Forgot-to-Stop &amp; Idle Protection</div>
-          <div class="settings-field">
-            <label class="settings-label" for="settingIdleAlert">Forgot-to-Stop Alert Threshold</label>
-            <select id="settingIdleAlert" class="settings-select">
-              <option value="0">Off (No Warning)</option>
-              <option value="60">After 60 Minutes (1 Hour)</option>
-              <option value="90">After 90 Minutes (1.5 Hours)</option>
-              <option value="120" selected>After 120 Minutes (2 Hours)</option>
-              <option value="180">After 180 Minutes (3 Hours)</option>
-              <option value="240">After 240 Minutes (4 Hours)</option>
-            </select>
-          </div>
-          <div class="settings-field">
-            <label class="settings-label" for="settingConfirmEndSession">End Session Confirmation</label>
-            <select id="settingConfirmEndSession" class="settings-select">
-              <option value="always" selected>Always Ask (Review before saving)</option>
-              <option value="auto">Auto-Save directly without prompt</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div class="modal-footer">
-        <span class="modal-footer-hint">Changes save automatically</span>
-        <button class="btn-small" id="settingsDoneBtn">Done</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- End Session Review Modal -->
-  <div class="modal-backdrop" id="endSessionModal" role="dialog" aria-modal="true" aria-labelledby="endSessionTitle">
-    <div class="modal-card modal-card-md">
-      <div class="modal-header">
-        <div class="modal-title" id="endSessionTitle">
-          <span>✓ Session Finished</span>
-        </div>
-        <button class="modal-close-btn" id="endSessionCloseBtn" aria-label="Close Modal">✕</button>
-      </div>
-
-      <div class="modal-body modal-body-spacious">
-        <div class="session-summary-box">
-          <div class="session-summary-time" id="reviewSessionDuration">00:00.00</div>
-          <div class="session-summary-meta" id="reviewSessionMeta">Overall Work • 0 study blocks</div>
-        </div>
-
-        <div id="reviewWarningBox" class="session-summary-warning is-hidden">
-          <span>⚠️ <strong>Notice:</strong> This session ran for an extended period. If you forgot to stop the timer while away, you can adjust the hours below or discard it completely!</span>
-        </div>
-
-        <div class="form-group is-hidden" id="adjustTimeGroup">
-          <label class="form-label" for="adjustTimeInput">Adjusted Study Time (Minutes or Hours)</label>
-          <input type="text" id="adjustTimeInput" class="form-input" placeholder="e.g. 60 dk, 45m, 1.5h">
-          <span class="modal-footer-hint">Enter the actual time you studied</span>
-        </div>
-
-        <div class="end-session-actions">
-          <button class="btn-ctrl btn-primary-toggle" id="btnConfirmSaveSession">
-            ✓ Save to Today's Diary
-          </button>
-          <button class="btn-small btn-warning-outline" id="btnToggleAdjustTime">
-            ✏️ Adjust Time (I forgot to stop timer)
-          </button>
-          <button class="btn-small btn-danger-outline" id="btnDiscardSession">
-            ✕ Discard Session (Don't Save)
-          </button>
-        </div>
-      </div>
-
-      <div class="modal-footer">
-        <span class="modal-footer-hint">Discarding leaves today's diary untouched.</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- Quick-Paste Multi-Day Diary Modal -->
-  <div class="modal-backdrop" id="quickImportModal" role="dialog" aria-modal="true" aria-labelledby="quickImportTitle">
-    <div class="modal-card modal-card-md">
-      <div class="modal-header">
-        <div class="modal-title" id="quickImportTitle">
-          <span>📥 Quick-Paste Study Diary</span>
-        </div>
-        <button class="modal-close-btn" id="quickImportCloseBtn" aria-label="Close Modal">✕</button>
-      </div>
-      <div class="modal-body modal-body-spacious">
-        <p class="modal-footer-hint">
-          Paste your notebook diary notes below. Lines like <code>06/04</code> set the date, followed by entries like <code>120 dk diff</code>, <code>70 dk molbio</code>, or <code>nothin</code>.
-        </p>
-        <textarea id="quickImportTextarea" class="quick-import-textarea" placeholder="06/04&#10;120 dk diff&#10;07/04&#10;55 dk diff&#10;70 dk molbio&#10;08/04&#10;100dk molbio&#10;09/04&#10;40 dk molbio diff eq tekrar&#10;130 dk mass&#10;11/04&#10;nothin"></textarea>
-        
-        <div class="settings-field">
-          <label class="settings-label" for="importYearSelect">Calendar Year</label>
-          <select id="importYearSelect" class="settings-select">
-            <!-- Populated dynamically with years -->
-          </select>
-        </div>
-
-        <div class="import-preview-box" id="importPreviewBox">
-          <span>Click "⚡ Parse &amp; Preview" to inspect parsed days and subjects...</span>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-small" id="btnPreviewImport">⚡ Parse &amp; Preview</button>
-        <button class="btn-small btn-primary-accent" id="btnApplyImport" disabled>Import to Diary ✓</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Toast Notification Feedback -->
-  <div class="toast" id="toast" role="status" aria-live="polite"></div>
-
-  <!-- Application Logic -->
+    <footer class="dialog-footer"><span class="muted">Preferences save automatically.</span><button data-close>Done</button></footer>
+  </dialog>
+  <dialog id="reviewModal" aria-labelledby="reviewTitle">
+    <header class="dialog-header"><h2 id="reviewTitle">Review session</h2><button data-close aria-label="Close review">×</button></header>
+    <div class="dialog-body"><p id="reviewTotal" class="review-total"></p><p id="reviewWarning" class="notice" hidden></p><div id="reviewBlocks"></div><label class="field">Adjust whole session<input id="adjustTotal" placeholder="Optional: 45m or 1.5h"></label><p class="muted">Numbers without a unit mean minutes. Whole-session adjustments preserve the proportions of your blocks.</p><p id="reviewError" class="form-error" role="alert"></p></div>
+    <footer class="dialog-footer"><button id="discardSession" class="danger">Discard</button><button id="saveSession" class="primary">Save session</button></footer>
+  </dialog>
+  <dialog id="subjectModal" aria-labelledby="subjectTitle">
+    <header class="dialog-header"><h2 id="subjectTitle">Rename subject</h2><button data-close aria-label="Close subject rename">×</button></header>
+    <form id="renameSubjectForm"><div class="dialog-body"><label class="field">Subject name<input id="renameSubjectName" maxlength="100" required></label><p id="subjectError" class="form-error" role="alert"></p></div><footer class="dialog-footer"><button type="button" data-close>Cancel</button><button class="primary">Rename</button></footer></form>
+  </dialog>
+  <dialog id="confirmModal" aria-labelledby="confirmTitle">
+    <header class="dialog-header"><h2 id="confirmTitle">Delete all sessions?</h2><button data-close aria-label="Close confirmation">×</button></header>
+    <div class="dialog-body"><p>All saved sessions and their linked diary time will be deleted. Manual entries, legacy daily totals, imports, and notes will remain.</p></div>
+    <footer class="dialog-footer"><button data-close>Cancel</button><button id="confirmDeleteHistory" class="danger">Delete all sessions</button></footer>
+  </dialog>
+  <dialog id="entryModal" aria-labelledby="entryTitle">
+    <header class="dialog-header"><h2 id="entryTitle">Add study time</h2><button data-close aria-label="Close entry editor">×</button></header>
+    <form id="entryForm"><div class="dialog-body"><label class="field">Date<input id="entryDate" type="date" required></label><label class="field">Subject<select id="entrySubject"></select></label><label class="field">Duration<input id="entryDuration" placeholder="90m, 1.5h, or 120 dk" required></label><p class="muted">Numbers without a unit mean minutes.</p><p id="entryError" class="form-error" role="alert"></p></div><footer class="dialog-footer"><button type="button" data-close>Cancel</button><button class="primary">Save</button></footer></form>
+  </dialog>
+  <dialog id="historyModal" aria-labelledby="historyTitle">
+    <header class="dialog-header"><h2 id="historyTitle">Sessions</h2><button data-close aria-label="Close sessions">×</button></header>
+    <div class="dialog-body" id="historyList"></div><footer class="dialog-footer"><button id="clearHistory" class="danger">Delete all sessions</button><button data-close>Done</button></footer>
+  </dialog>
+  <dialog id="importModal" aria-labelledby="importTitle">
+    <header class="dialog-header"><h2 id="importTitle">Paste diary</h2><button data-close aria-label="Close diary importer">×</button></header>
+    <div class="dialog-body"><p class="muted">Start each day with a date, then study lines or notes. Numbers without units mean minutes.</p><label for="importText" class="sr-only">Diary notes</label><textarea id="importText" rows="9" placeholder="06/10&#10;120 dk Math&#10;07/10&#10;45m Coding"></textarea><label class="field">Year<input id="importYear" type="number" min="1000" max="9999"></label><div id="importPreview" class="preview" aria-live="polite">Preview before importing.</div></div>
+    <footer class="dialog-footer"><button id="previewImport">Preview</button><button id="applyImport" class="primary" disabled>Import</button></footer>
+  </dialog>
+  <dialog id="syncModal" aria-labelledby="syncTitle">
+    <header class="dialog-header"><h2 id="syncTitle">Sync note entries</h2><button data-close aria-label="Close note sync">×</button></header>
+    <div class="dialog-body"><p class="muted">This replaces time generated by the previous note sync for this day. Manual entries and saved sessions stay recorded. Imported lines are skipped.</p><div id="syncPreview"></div></div>
+    <footer class="dialog-footer"><button data-close>Cancel</button><button id="applySync" class="primary">Apply sync</button></footer>
+  </dialog>
+  <dialog id="restoreModal" aria-labelledby="restoreTitle">
+    <header class="dialog-header"><h2 id="restoreTitle">Restore backup</h2><button data-close aria-label="Close backup restore">×</button></header>
+    <div class="dialog-body"><p id="restorePreview"></p><p class="notice">Restore replaces current records and notes. A recovery snapshot will be retained. Backed-up drafts reopen paused for review.</p><p id="restoreError" class="form-error" role="alert"></p></div>
+    <footer class="dialog-footer"><button data-close>Cancel</button><button id="confirmRestore" class="primary">Replace with backup</button></footer>
+  </dialog>
+  <script src="core.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
