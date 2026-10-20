@@ -8,7 +8,7 @@
   const KEY = 'chrono_focus_data_v2';
   const DRAFT_KEY = 'chrono_focus_draft_v2';
   const DEFAULTS = Object.freeze({ theme: 'emerald', precision: 2, sound: true,
-    goal: 4, showGoals: false, weekStart: 'monday', dateFormat: 'DD/MM', chime: 0, idle: 120, confirm: 'always' });
+    goal: 4, showGoals: false, showTimeRanges: false, weekStart: 'monday', dateFormat: 'DD/MM', chime: 0, idle: 120, confirm: 'always' });
   const clone = value => JSON.parse(JSON.stringify(value));
   const id = () => globalThis.crypto?.randomUUID?.() || `id_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
@@ -31,6 +31,7 @@
     for (const [key, values] of Object.entries(options)) if (values.includes(input[key])) out[key] = input[key];
     if (typeof input.sound === 'boolean') out.sound = input.sound;
     if (typeof input.showGoals === 'boolean') out.showGoals = input.showGoals;
+    if (typeof input.showTimeRanges === 'boolean') out.showTimeRanges = input.showTimeRanges;
     return out;
   }
   function empty() {
@@ -162,10 +163,12 @@
     if (!blocks.length) throw new Error('There is no new study time to save.');
     for (const b of blocks) {
       if (!positive(b.duration) || !validDate(b.date) || !data.subjects.some(s => s.id === b.subjectId)) throw new Error('Check every block’s duration, date, and subject.');
+      validateTimeRange(b);
     }
     data.sessions.unshift({ id: sessionId, createdAt: new Date().toISOString(), legacy: false });
     for (const block of blocks) data.entries.push({ id: id(), date: block.date, subjectId: block.subjectId,
-      duration: block.duration, source: 'session', sessionId });
+      duration: block.duration, source: 'session', sessionId,
+      ...(block.startedAt !== undefined ? {startedAt: block.startedAt, endedAt: block.endedAt} : {}) });
     return true;
   }
   function totals(data, date) {
@@ -210,6 +213,11 @@
     if (!data.subjects.some(s => !s.hidden)) subject(data,'Overall Work');
     return validate(data);
   }
+  function validateTimeRange(record) {
+    if (record.startedAt === undefined && record.endedAt === undefined) return;
+    const validStamp = stamp => typeof stamp === 'string' && Number.isFinite(Date.parse(stamp)) && new Date(stamp).toISOString() === stamp;
+    if (!validStamp(record.startedAt) || !validStamp(record.endedAt) || Date.parse(record.endedAt) < Date.parse(record.startedAt)) throw new Error('Invalid study time range.');
+  }
   function validate(input) {
     if (!input || input.version !== 2) throw new Error('Unsupported backup version.');
     const data = clone(input);
@@ -232,6 +240,7 @@
     }
     if (!data.subjects.some(s => !s.hidden)) throw new Error('Keep at least one selectable subject.');
     for (const e of data.entries) {
+      validateTimeRange(e);
       if (!validDate(e.date) || !positive(e.duration) || !subjects.has(e.subjectId) || !['manual','legacy','session','sync','import'].includes(e.source)) throw new Error('Invalid study entry.');
       if (e.source === 'session' && !sessions.has(e.sessionId)) throw new Error('Entry references a missing session.');
       if (e.source === 'import' && !batches.has(e.importId)) throw new Error('Entry references a missing import.');
@@ -263,6 +272,15 @@
   }
   function checkpoint(draft, now = Date.now()) {
     const times = draftTimes(draft,now);
+    // Capture observed wall-clock bounds, not duration-derived estimates. Pauses
+    // stay inside the span but remain excluded from the credited duration.
+    if (draft.running && now > draft.startedAt) {
+      if (draft.blockStartedAt === undefined && draft.blockElapsed > 0) draft.blockRangeUnknown = true;
+      if (!draft.blockRangeUnknown) {
+        if (draft.blockStartedAt === undefined) draft.blockStartedAt = draft.startedAt;
+        draft.blockEndedAt = now;
+      }
+    }
     draft.elapsed = Math.round(times.total); draft.blockElapsed = Math.round(times.block);
     draft.startedAt = draft.running ? now : 0;
   }
@@ -270,7 +288,10 @@
   function closeBlock(draft, now = Date.now()) {
     checkpoint(draft,now);
     if (!draft.blockElapsed) return false;
-    draft.blocks.push({ duration: draft.blockElapsed, subjectId: draft.activeSubjectId, date: dateKey(new Date(now)), legacyCredited: false });
+    draft.blocks.push({ duration: draft.blockElapsed, subjectId: draft.activeSubjectId, date: dateKey(new Date(now)), legacyCredited: false,
+      ...(draft.blockStartedAt !== undefined ? {startedAt: new Date(draft.blockStartedAt).toISOString(), endedAt: new Date(draft.blockEndedAt).toISOString()} : {}) });
+    delete draft.blockStartedAt; delete draft.blockEndedAt;
+    delete draft.blockRangeUnknown;
     draft.blockElapsed = 0; return true;
   }
   function validateDraft(input, data) {
@@ -284,6 +305,11 @@
       || typeof draft.needsReview !== 'boolean' || typeof draft.legacyNotice !== 'boolean') throw new Error('Invalid active draft.');
     for (const b of draft.blocks) if (!positive(b.duration) || !validDate(b.date)
       || !data.subjects.some(s => s.id === b.subjectId) || typeof b.legacyCredited !== 'boolean') throw new Error('Invalid draft block.');
+    for (const b of draft.blocks) validateTimeRange(b);
+    if (draft.blockRangeUnknown !== undefined && typeof draft.blockRangeUnknown !== 'boolean') throw new Error('Invalid draft time range state.');
+    if ((draft.blockStartedAt !== undefined || draft.blockEndedAt !== undefined)
+      && (!Number.isSafeInteger(draft.blockStartedAt) || !Number.isSafeInteger(draft.blockEndedAt)
+      || draft.blockStartedAt < 0 || draft.blockEndedAt < draft.blockStartedAt || !Number.isFinite(new Date(draft.blockEndedAt).getTime()))) throw new Error('Invalid draft time range.');
     const recorded = draft.blocks.reduce((sum,b) => sum+b.duration,0) + draft.blockElapsed;
     if (recorded !== draft.elapsed || !Number.isSafeInteger(recorded)) throw new Error('Draft block totals do not match.');
     if (!Number.isSafeInteger(draftTimes(draft).total)) throw new Error('Draft duration exceeds the supported range.');

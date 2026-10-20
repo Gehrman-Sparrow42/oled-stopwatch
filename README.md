@@ -32,6 +32,10 @@ Deleting an entry, a day's time, or one session offers ten seconds of Undo. Anot
 
 ## Notes, imports, and exports
 
+Repeated entries for the same subject on one day appear as one combined row with their summed duration. Expand that row to edit or delete individual entries; grouping does not merge or rewrite stored records or session links. Daily totals use an accent badge to distinguish them from entry durations.
+
+New timer blocks record their observed start and end timestamps. The notebook's **Show time ranges** switch (also in Preferences) is off by default and remembers your choice. Turning it on shows each recorded range in local time, including on combined rows. A range spans the first start through the last pause or finish; breaks inside that span remain excluded from credited study time. Midnight-crossing ranges include dates. Existing entries, manual additions, imports, and older drafts without reliable timing show “Time range not recorded”; times are never inferred from duration or session-save timestamps. Changing the assigned study date or duration retains the observed range; dates appear in the range whenever they differ from the assigned day. Timestamps survive draft recovery and JSON backup/restore.
+
 Durations accept `120 dk`, `90m`, `1.5h`, `1,5h`, and seconds such as `30s`. A bare number always means minutes. Notes also accept shorthand such as `40 dk molbio diff eq tekrar`; the longest existing subject prefix takes precedence.
 
 Sync notes previews what will be recorded and replaces only that day's previous note-generated entries. Repeating a sync does not add time again. Imported lines and stamped study summaries are excluded. Editing a synced entry manually can be superseded by a later sync of its source notes.

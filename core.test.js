@@ -41,6 +41,44 @@ test('completed blocks stay provisional; 20 + 10 minutes commits once', () => {
   assert.equal(C.totals(data).total,30*minute);
   assert.equal(data.sessions.length,1);
 });
+
+test('timer ranges capture start and end across pauses, survive reload and backup, and keep breaks out of totals', () => {
+  const data = fixture(), draft = C.newDraft(data.subjects[0].id);
+  const start = Date.parse('2026-10-06T10:00:00.000Z');
+  draft.running = true; draft.startedAt = start;
+  C.pause(draft,start+10*minute);
+  const restored = C.validateDraft(JSON.parse(JSON.stringify(draft)),data);
+  restored.running = true; restored.startedAt = start+20*minute;
+  C.pause(restored,start+25*minute);
+  C.closeBlock(restored,start+30*minute);
+  assert.equal(restored.blocks[0].startedAt,new Date(start).toISOString());
+  assert.equal(restored.blocks[0].endedAt,new Date(start+25*minute).toISOString());
+  assert.equal(restored.blocks[0].duration,15*minute);
+  C.commitSession(data,'timed-session',restored.blocks);
+  const backup = C.backup({...data,draft:restored});
+  assert.equal(backup.data.entries[0].startedAt,restored.blocks[0].startedAt);
+  assert.equal(backup.data.entries[0].endedAt,restored.blocks[0].endedAt);
+  assert.equal(C.totals(backup.data).total,15*minute);
+  data.settings.showTimeRanges = true;
+  assert.equal(C.validate(data).settings.showTimeRanges,true);
+  for (const range of [{startedAt:'invalid',endedAt:'invalid'}, {startedAt:new Date(start).toISOString()}, {startedAt:new Date(start).toISOString(),endedAt:new Date(start-1).toISOString()}]) {
+    const invalid = C.clone(data); Object.assign(invalid.entries[0],{startedAt:undefined,endedAt:undefined},range);
+    assert.throws(() => C.validate(invalid),/time range/);
+  }
+});
+
+test('recovered older drafts do not invent a start time for pre-existing elapsed work', () => {
+  const data = fixture(), draft = C.newDraft(data.subjects[0].id), start = Date.parse('2026-10-06T10:00:00.000Z');
+  draft.elapsed = 10*minute; draft.blockElapsed = 10*minute;
+  draft.running = true; draft.startedAt = start;
+  C.closeBlock(draft,start+minute);
+  assert.equal(draft.blocks[0].duration,11*minute);
+  assert.equal(draft.blocks[0].startedAt,undefined);
+  assert.equal(draft.blocks[0].endedAt,undefined);
+  C.closeBlock(draft,start+2*minute);
+  assert.equal(draft.blocks[1].startedAt,new Date(start+minute).toISOString());
+  assert.equal(draft.blocks[1].endedAt,new Date(start+2*minute).toISOString());
+});
 test('discarding a draft with completed blocks never touches committed records', () => {
   const data = fixture(), original = C.clone(data), draft = C.newDraft(data.subjects[0].id);
   draft.running = true; draft.startedAt = Date.now()-20*minute; C.closeBlock(draft);

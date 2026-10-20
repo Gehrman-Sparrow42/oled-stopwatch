@@ -220,13 +220,40 @@
       for (const entry of entries) {
         const row = el('div',undefined,'entry-row'), description = el('div',undefined,'entry-description');
         description.append(el('span',`${this.subjectName(entry.subjectId)} · ${pretty(entry.duration)}`),el('small',`${this.displayDate(entry.date)} · ${entry.source === 'legacy' ? 'Legacy daily total' : entry.source === 'sync' ? 'Synced note' : entry.source}`));
+        if (this.settings.showTimeRanges) description.append(el('small',this.timeRange(entry),'entry-time-range'));
         const actions = el('div',undefined,'row-actions'); actions.append(button('Edit','edit-entry',entry.id),button('Delete','delete-entry',entry.id,'danger')); row.append(description,actions); list.append(row);
       }
       if (!entries.length) list.append(el('p','No saved study entries.','muted')); return list;
     }
+    timeRange(entry) {
+      if (!entry.startedAt || !entry.endedAt) return 'Time range not recorded';
+      const start = new Date(entry.startedAt), end = new Date(entry.endedAt);
+      const clock = date => date.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+      const sameDay = C.dateKey(start) === C.dateKey(end) && C.dateKey(start) === entry.date;
+      return `${sameDay ? clock(start) : this.displayDate(C.dateKey(start))+' '+clock(start)} – ${sameDay ? clock(end) : this.displayDate(C.dateKey(end))+' '+clock(end)}`;
+    }
+    groupedEntriesUI(entries, expanded = new Set()) {
+      const list = el('div',undefined,'subject-entries'), groups = new Map();
+      for (const entry of entries) {
+        if (!groups.has(entry.subjectId)) groups.set(entry.subjectId,[]);
+        groups.get(entry.subjectId).push(entry);
+      }
+      for (const [subjectId,items] of groups) {
+        if (items.length === 1) { list.append(this.entriesUI(items)); continue; }
+        const group = el('details',undefined,'entry-group'); group.dataset.detail = `subject-${items[0].date}-${subjectId}`; group.open = expanded.has(group.dataset.detail);
+        const summary = el('summary'), description = el('span',undefined,'group-description');
+        description.append(el('strong',this.subjectName(subjectId)),el('small',`${items.length} entries · View details`));
+        if (this.settings.showTimeRanges) description.append(el('small',items.map(item => this.timeRange(item)).join(' · '),'entry-time-range'));
+        summary.append(description,el('span',pretty(items.reduce((total,item) => total+item.duration,0)),'group-total'));
+        group.append(summary,this.entriesUI(items)); list.append(group);
+      }
+      if (!entries.length) list.append(el('p','No saved study entries.','muted'));
+      return list;
+    }
     renderDiaryIfVisible() { if (this.tab === 'diary') this.renderDiary(); }
     renderDiary() {
       $('goalsToggle').setAttribute('aria-checked',String(this.settings.showGoals));
+      $('timeRangesToggle').setAttribute('aria-checked',String(this.settings.showTimeRanges));
       const expanded = new Set([...$('daysList').querySelectorAll('details[open]')].map(n => n.dataset.detail));
       const focused = document.activeElement?.dataset.noteDate;
       const start = focused ? document.activeElement.selectionStart : null, end = focused ? document.activeElement.selectionEnd : null;
@@ -238,7 +265,8 @@
         const header = el('div',undefined,'day-header'), name = el('div');
         name.append(el('h3',date.toLocaleDateString('en',{weekday:'long'})),el('span',this.displayDate(key),'muted'));
         if (key === C.dateKey()) { name.append(el('span','TODAY','today-label')); card.classList.add('is-today'); }
-        header.append(name,el('span',pretty(total),'day-total')); card.append(header);
+        const dayTotal = el('span',pretty(total),'day-total'); if (!total) dayTotal.classList.add('is-empty');
+        header.append(name,dayTotal); card.append(header);
         if (this.settings.showGoals) {
           const goal = el('div',undefined,'day-goal'), progress = el('progress'); progress.max = this.settings.goal*3600000; progress.value = total; progress.setAttribute('aria-label',`Daily goal for ${key}`);
           goal.append(progress,el('span',`${pretty(total)} / ${this.settings.goal}h goal`,'muted')); card.append(goal);
@@ -252,7 +280,7 @@
         const entries = this.data.entries.filter(e => e.date === key);
         const entrySection = el('section',undefined,'day-entries'), entryHeader = el('div',undefined,'entries-header');
         entryHeader.append(el('h4',`Entries · ${entries.length}`),button('+ Add time','add-entry',key,'add-time'));
-        entrySection.append(entryHeader,this.entriesUI(entries)); card.append(entrySection);
+        entrySection.append(entryHeader,this.groupedEntriesUI(entries,expanded)); card.append(entrySection);
         const notes = el('details',undefined,'day-notes'); notes.dataset.detail = `notes-${key}`; notes.open = expanded.has(notes.dataset.detail);
         const noteText = this.dirtyNotes.has(key) ? this.dirtyNotes.get(key) : this.data.notes[key] || '';
         const noteSummary = el('summary'), save = el('span',this.dirtyNotes.has(key) ? 'Unsaved notes' : noteText.trim() ? 'Has notes' : 'Add a note','note-hint'); save.dataset.saveDate = key; save.setAttribute('role','status');
@@ -533,6 +561,7 @@
       on('settingsToggle',() => { this.renderSettings(); this.open('settingsModal'); }); on('historyToggle',() => { this.renderHistory(); this.open('historyModal'); });
       on('tabTimer',() => this.switchTab('timer')); on('tabDiary',() => this.switchTab('diary'));
       on('goalsToggle',() => this.mutate(data => { data.settings.showGoals = !data.settings.showGoals; },null));
+      on('timeRangesToggle',() => this.mutate(data => { data.settings.showTimeRanges = !data.settings.showTimeRanges; },null));
       on('prevWeek',() => { if (this.flushNotes()) { this.week.setDate(this.week.getDate()-7); this.renderDiary(); } }); on('nextWeek',() => { if (this.flushNotes()) { this.week.setDate(this.week.getDate()+7); this.renderDiary(); } }); on('todayWeek',() => { if (this.flushNotes()) { this.week = this.weekStart(new Date()); this.renderDiary(); } });
       on('entryForm',event => this.saveEntry(event),'submit'); on('addSubjectForm',event => { event.preventDefault(); this.addSubject($('subjectName').value); $('subjectName').value = ''; },'submit');
       on('renameSubjectForm',event => this.renameSubject(event),'submit');

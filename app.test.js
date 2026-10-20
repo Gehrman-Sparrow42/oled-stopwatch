@@ -15,6 +15,7 @@ function harness(seed = {}) {
   } };
   const context = { ChronoCore:C, localStorage:storage, Date, JSON, Map, Set, performance, setTimeout, clearTimeout,
     document:{readyState:'loading',addEventListener(){},getElementById:node,querySelectorAll:() => [],
+      createElement(tag) { return {tag,dataset:{},children:[],textContent:'',append(...children){this.children.push(...children);}}; },
       querySelector(selector) { const match = selector.match(/data-review-(subject|date|duration)="(\d+)"/); return match ? node(match[1]+match[2]) : null; }} };
   context.window = context;
   vm.runInNewContext(fs.readFileSync(require.resolve('./app.js'),'utf8'),context);
@@ -25,6 +26,45 @@ function harness(seed = {}) {
 }
 const fixture = () => C.migrate({customSubjects:['Math','Coding']});
 const date = '2026-10-06';
+
+test('notebook combines repeated subjects while retaining every original edit target', () => {
+  const data = fixture(), {app} = harness({[C.KEY]:JSON.stringify(data)}); app.load();
+  const entries = [
+    {id:'a',date,subjectId:data.subjects[0].id,duration:24*60000,source:'manual'},
+    {id:'b',date,subjectId:data.subjects[1].id,duration:60000,source:'manual'},
+    {id:'c',date,subjectId:data.subjects[0].id,duration:10*60000,source:'manual'}
+  ];
+  const before = JSON.stringify(entries), list = app.groupedEntriesUI(entries);
+  assert.equal(list.children.length,2);
+  const group = list.children[0]; assert.equal(group.tag,'details'); assert.equal(group.open,false);
+  assert.equal(group.children[0].children[1].textContent,'34m');
+  const buttons = group.children[1].children.flatMap(row => row.children[1].children);
+  assert.deepEqual(Array.from(buttons,button => button.dataset.value),['a','a','c','c']);
+  assert.equal(app.groupedEntriesUI(entries,new Set([group.dataset.detail])).children[0].open,true);
+  assert.equal(JSON.stringify(entries),before);
+  assert.equal(app.groupedEntriesUI([]).children[0].textContent,'No saved study entries.');
+});
+
+test('time ranges are opt-in and missing historical timestamps are never inferred', () => {
+  const data = fixture(), {app} = harness({[C.KEY]:JSON.stringify(data)}); app.load();
+  const entry = {id:'timed',date,subjectId:data.subjects[0].id,duration:60000,source:'manual',startedAt:'2026-10-06T10:00:00.000Z',endedAt:'2026-10-06T10:01:00.000Z'};
+  assert.equal(app.entriesUI([entry]).children[0].children[0].children.length,2);
+  app.data.settings.showTimeRanges = true;
+  assert.equal(app.entriesUI([entry]).children[0].children[0].children.length,3);
+  assert.match(app.timeRange(entry),/\d{2}:\d{2} – \d{2}:\d{2}/);
+  assert.equal(app.timeRange({duration:60000}),'Time range not recorded');
+});
+
+test('moving a timed entry preserves its observed range and displays its original dates', () => {
+  const data = fixture();
+  C.commitSession(data,'timed',[{date,subjectId:data.subjects[0].id,duration:60000,startedAt:'2026-10-06T10:00:00.000Z',endedAt:'2026-10-06T10:01:00.000Z'}]);
+  const {app,node} = harness({[C.KEY]:JSON.stringify(data)}); app.load(); app.entryId = data.entries[0].id;
+  node('entryDuration').value = '1m'; node('entrySubject').value = data.subjects[0].id; node('entryDate').value = '2026-10-07';
+  app.saveEntry({preventDefault(){}});
+  assert.equal(app.data.entries[0].startedAt,'2026-10-06T10:00:00.000Z'); assert.equal(app.data.entries[0].endedAt,'2026-10-06T10:01:00.000Z');
+  assert.match(app.timeRange(app.data.entries[0]),/06\/10/);
+  assert.equal(app.data.entries[0].duration,60000); assert.equal(app.data.entries[0].sessionId,'timed');
+});
 test('app migration reads the corrected end-session preference and preserves original keys', () => {
   const raw = JSON.stringify({[date]:{totalMs:60000,subjects:{Math:60000},notes:'original'}});
   const {app,storage} = harness({chrono_study_diary_v1:raw,chrono_focus_confirm_end:'auto'});

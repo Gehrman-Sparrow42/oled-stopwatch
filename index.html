@@ -51,7 +51,7 @@
     <section id="viewDiary" role="tabpanel" aria-labelledby="tabDiary" hidden>
       <div class="week-nav"><button id="prevWeek" aria-label="Previous week">←</button><div><h2 id="weekTitle"></h2><button id="todayWeek" class="subtle">This week</button></div><button id="nextWeek" aria-label="Next week">→</button></div>
       <div class="week-summary"><div><span class="muted">Total</span><strong id="weekTotal">0m</strong></div><div><span class="muted">Daily average</span><strong id="weekAverage">0m</strong></div><div><span class="muted">Top subject</span><strong id="weekTop">—</strong></div></div>
-      <div class="notebook-toolbar"><div class="notebook-tools"><button id="pasteDiary">Paste diary</button><button id="copyWeek">Copy week</button><button id="exportWeek">Export Markdown</button></div><button id="goalsToggle" class="goals-toggle" role="switch" aria-checked="false">Show goals <span class="switch-track" aria-hidden="true"></span></button></div>
+      <div class="notebook-toolbar"><div class="notebook-tools"><button id="pasteDiary">Paste diary</button><button id="copyWeek">Copy week</button><button id="exportWeek">Export Markdown</button></div><div class="notebook-display"><button id="timeRangesToggle" class="goals-toggle" role="switch" aria-checked="false">Show time ranges <span class="switch-track" aria-hidden="true"></span></button><button id="goalsToggle" class="goals-toggle" role="switch" aria-checked="false">Show goals <span class="switch-track" aria-hidden="true"></span></button></div></div>
       <div id="daysList"></div>
     </section>
     <footer class="app-footer">Private · Stored in this browser · Back up in Preferences</footer>
@@ -68,6 +68,7 @@
       </section>
       <section class="settings-section"><h3>Notebook</h3>
         <label class="field">Show daily goals<select id="settingShowGoals"><option value="false">Off</option><option value="true">On</option></select></label>
+        <label class="field">Show time ranges<select id="settingShowTimeRanges"><option value="false">Off</option><option value="true">On</option></select></label>
         <label class="field">Daily goal<select id="settingGoal"><option value="1">1 hour</option><option value="2">2 hours</option><option value="3">3 hours</option><option value="4">4 hours</option><option value="5">5 hours</option><option value="6">6 hours</option><option value="8">8 hours</option><option value="10">10 hours</option></select></label>
         <label class="field">Week starts<select id="settingWeekStart"><option value="monday">Monday</option><option value="sunday">Sunday</option></select></label>
         <label class="field">Date format<select id="settingDateFormat"><option value="DD/MM">DD/MM</option><option value="MM/DD">MM/DD</option></select></label>
