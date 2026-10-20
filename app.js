@@ -226,6 +226,7 @@
     }
     renderDiaryIfVisible() { if (this.tab === 'diary') this.renderDiary(); }
     renderDiary() {
+      $('goalsToggle').setAttribute('aria-checked',String(this.settings.showGoals));
       const expanded = new Set([...$('daysList').querySelectorAll('details[open]')].map(n => n.dataset.detail));
       const focused = document.activeElement?.dataset.noteDate;
       const start = focused ? document.activeElement.selectionStart : null, end = focused ? document.activeElement.selectionEnd : null;
@@ -236,22 +237,32 @@
         const card = el('article',undefined,'day-card'); card.dataset.date = key;
         const header = el('div',undefined,'day-header'), name = el('div');
         name.append(el('h3',date.toLocaleDateString('en',{weekday:'long'})),el('span',this.displayDate(key),'muted'));
-        if (key === C.dateKey()) name.append(el('span','TODAY','today-label')); header.append(name,el('span',pretty(total),'day-total')); card.append(header);
-        const goal = el('div',undefined,'day-goal'), progress = el('progress'); progress.max = this.settings.goal*3600000; progress.value = total; progress.setAttribute('aria-label',`Daily goal for ${key}`);
-        goal.append(progress,el('span',`${pretty(total)} / ${this.settings.goal}h goal`,'muted')); card.append(goal);
+        if (key === C.dateKey()) { name.append(el('span','TODAY','today-label')); card.classList.add('is-today'); }
+        header.append(name,el('span',pretty(total),'day-total')); card.append(header);
+        if (this.settings.showGoals) {
+          const goal = el('div',undefined,'day-goal'), progress = el('progress'); progress.max = this.settings.goal*3600000; progress.value = total; progress.setAttribute('aria-label',`Daily goal for ${key}`);
+          goal.append(progress,el('span',`${pretty(total)} / ${this.settings.goal}h goal`,'muted')); card.append(goal);
+        }
         const badges = el('div',undefined,'day-subjects');
         for (const [sid,ms] of subjects) {
           const badge = el('span',`${this.subjectName(sid)} ${pretty(ms)} `), remove = button('×','clear-subject',sid);
           remove.dataset.date = key; remove.setAttribute('aria-label',`Remove ${this.subjectName(sid)} time from ${key}`);
           badge.append(remove); badges.append(badge); bySubject.set(sid,(bySubject.get(sid)||0)+ms);
         } card.append(badges);
-        const note = el('textarea'); note.value = this.dirtyNotes.has(key) ? this.dirtyNotes.get(key) : this.data.notes[key] || ''; note.dataset.noteDate = key; note.setAttribute('aria-label',`Notes for ${date.toLocaleDateString('en',{weekday:'long'})} ${key}`); note.placeholder = 'Study notes, topics, or 45m Math…'; card.append(note);
-        const footer = el('div',undefined,'day-footer'), save = el('span',this.dirtyNotes.has(key) ? 'Unsaved notes' : 'Notes saved','muted'); save.dataset.saveDate = key;
+        const entries = this.data.entries.filter(e => e.date === key);
+        const entrySection = el('section',undefined,'day-entries'), entryHeader = el('div',undefined,'entries-header');
+        entryHeader.append(el('h4',`Entries · ${entries.length}`),button('+ Add time','add-entry',key,'add-time'));
+        entrySection.append(entryHeader,this.entriesUI(entries)); card.append(entrySection);
+        const notes = el('details',undefined,'day-notes'); notes.dataset.detail = `notes-${key}`; notes.open = expanded.has(notes.dataset.detail);
+        const noteText = this.dirtyNotes.has(key) ? this.dirtyNotes.get(key) : this.data.notes[key] || '';
+        const noteSummary = el('summary'), save = el('span',this.dirtyNotes.has(key) ? 'Unsaved notes' : noteText.trim() ? 'Has notes' : 'Add a note','note-hint'); save.dataset.saveDate = key; save.setAttribute('role','status');
+        noteSummary.append(el('span','Daily notes'),save); notes.append(noteSummary);
+        const note = el('textarea'); note.value = noteText; note.dataset.noteDate = key; note.setAttribute('aria-label',`Notes for ${date.toLocaleDateString('en',{weekday:'long'})} ${key}`); note.placeholder = 'Study notes, topics, or 45m Math…'; notes.append(note);
+        const footer = el('div',undefined,'day-footer');
         const actions = el('details',undefined,'day-actions'); actions.dataset.detail = `actions-${key}`; actions.open = expanded.has(actions.dataset.detail);
-        const tools = el('div',undefined,'detail-tools'); tools.append(button('Add time','add-entry',key),button('Sync notes','sync-notes',key),button('Stamp summary','stamp',key),button('Clear time','clear-day',key,'danger'));
-        actions.append(el('summary','Day actions'),tools); footer.append(save,actions); card.append(footer);
-        const detail = el('details'); detail.dataset.detail = `entries-${key}`; detail.open = expanded.has(detail.dataset.detail);
-        const entries = this.data.entries.filter(e => e.date === key); detail.append(el('summary',`Entries (${entries.length})`),this.entriesUI(entries)); card.append(detail); days.append(card);
+        const tools = el('div',undefined,'detail-tools'); tools.append(button('Sync notes','sync-notes',key),button('Stamp summary','stamp',key),button('Clear time','clear-day',key,'danger'));
+        card.append(notes);
+        actions.append(el('summary','Day actions'),tools); footer.append(actions); card.append(footer); days.append(card);
       }
       $('weekTitle').textContent = `${this.displayDate(C.dateKey(this.week))} – ${this.displayDate(lastKey)} · ${this.week.getFullYear()}`;
       $('weekTotal').textContent = pretty(weekTotal); $('weekAverage').textContent = pretty(weekTotal/7);
@@ -384,10 +395,13 @@
       try {
         this.store.commit(data => { for (const [date,note] of this.dirtyNotes) data.notes[date] = note; });
         for (const [date] of this.dirtyNotes) {
-          clearTimeout(this.noteTimers.get(date)); const label = [...document.querySelectorAll('[data-save-date]')].find(n => n.dataset.saveDate === date); if (label) label.textContent = 'Notes saved';
+          clearTimeout(this.noteTimers.get(date)); const label = [...document.querySelectorAll('[data-save-date]')].find(n => n.dataset.saveDate === date); if (label) label.textContent = this.dirtyNotes.get(date).trim() ? 'Has notes' : 'Add a note';
         }
         this.dirtyNotes.clear(); this.noteTimers.clear(); this.updateUndo(); return true;
-      } catch (error) { this.warn(`Notes are still unsaved: ${error.message}. Download a backup before closing.`); return false; }
+      } catch (error) {
+        for (const label of document.querySelectorAll('[data-save-date]')) if (this.dirtyNotes.has(label.dataset.saveDate)) label.textContent = 'Unsaved notes';
+        this.warn(`Notes are still unsaved: ${error.message}. Download a backup before closing.`); return false;
+      }
     }
     showSync(date) {
       if (!this.flushNotes()) return;
@@ -471,7 +485,9 @@
       if (dialog.returnFocus?.isConnected) dialog.returnFocus.focus();
       else {
         const parent = [...document.querySelectorAll('dialog[open]')].pop();
-        (parent?.querySelector('button') || $(this.tab === 'timer' ? 'tabTimer' : 'tabDiary')).focus();
+        const trigger = dialog.returnFocus?.dataset;
+        const replacement = trigger?.action ? [...document.querySelectorAll('button[data-action]')].find(node => node.dataset.action === trigger.action && node.dataset.value === trigger.value) : null;
+        (parent?.querySelector('button') || replacement || $(this.tab === 'timer' ? 'tabTimer' : 'tabDiary')).focus();
       }
     }
     toast(text) {
@@ -516,6 +532,7 @@
       on('quickAddSubject',() => { this.open('settingsModal'); $('subjectName').focus(); }); on('focusToggle',() => this.toggleFocus());
       on('settingsToggle',() => { this.renderSettings(); this.open('settingsModal'); }); on('historyToggle',() => { this.renderHistory(); this.open('historyModal'); });
       on('tabTimer',() => this.switchTab('timer')); on('tabDiary',() => this.switchTab('diary'));
+      on('goalsToggle',() => this.mutate(data => { data.settings.showGoals = !data.settings.showGoals; },null));
       on('prevWeek',() => { if (this.flushNotes()) { this.week.setDate(this.week.getDate()-7); this.renderDiary(); } }); on('nextWeek',() => { if (this.flushNotes()) { this.week.setDate(this.week.getDate()+7); this.renderDiary(); } }); on('todayWeek',() => { if (this.flushNotes()) { this.week = this.weekStart(new Date()); this.renderDiary(); } });
       on('entryForm',event => this.saveEntry(event),'submit'); on('addSubjectForm',event => { event.preventDefault(); this.addSubject($('subjectName').value); $('subjectName').value = ''; },'submit');
       on('renameSubjectForm',event => this.renameSubject(event),'submit');

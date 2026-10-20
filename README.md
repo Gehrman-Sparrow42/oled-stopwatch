@@ -24,7 +24,7 @@ Elapsed time uses timestamps rather than counting worker ticks. HTTP mode uses a
 
 ## Notebook and subjects
 
-The weekly notebook retains seven chronological days, daily goals, subject totals, and autosaved freeform notes. Expand Entries to edit duration, date, or subject. Linked session totals update from those entries. Subject badges retain a remove-time control with Undo. Day actions offers manual time, note sync, summary stamping, and clearing time. Clearing time preserves notes. Manual time accepts durations or shorthand such as `120 dk Math`.
+The weekly notebook retains seven chronological days, subject totals, and autosaved freeform notes. Each day shows its entries immediately, with Edit and Delete controls and a direct Add time button. Daily notes start collapsed; open Daily notes to read or edit them. Open note panels stay open during notebook updates. Show goals switches daily progress bars on or off and saves your preference; goals start hidden and the chosen daily target is retained in Preferences. These display changes keep the same storage keys and record format, including existing entries, sessions, notes, and recoverable drafts. Linked session totals update from their entries. Subject badges retain a remove-time control with Undo. Day actions offers manual time, note sync, summary stamping, and clearing time. Clearing time preserves notes. Manual time accepts durations or shorthand such as `120 dk Math`.
 
 Preferences supports adding, renaming, and removing subjects. Renaming updates historical labels and drafts through stable IDs without altering note text. Removing hides a subject from selection and retains its recorded history. Duplicate names and removal of the last selectable subject are prevented.
 

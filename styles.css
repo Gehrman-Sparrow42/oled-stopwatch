@@ -28,11 +28,37 @@ details { border-top: 1px solid var(--line); } summary { cursor: pointer; paddin
 .week-nav { display: flex; justify-content: space-between; align-items: center; gap: 1rem; text-align: center; } .week-nav button { min-width: 44px; }
 .week-summary { display: grid; grid-template-columns: 1fr 1fr 1.5fr; gap: 1rem; padding: 1.5rem 0; border-bottom: 1px solid var(--line); } .week-summary strong { display: block; font-weight: 500; margin-top: .25rem; overflow-wrap: anywhere; }
 .notebook-tools { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1.25rem 0; } .notebook-tools button { font-size: .8rem; }
-.day-card { border-top: 1px solid var(--line); padding: 1.5rem 0; } .day-header { display: flex; justify-content: space-between; align-items: center; gap: .5rem; margin-bottom: .75rem; } .day-header h3 { display: inline; margin-right: .5rem; } .today-label { color: var(--accent); margin-left: .5rem; font-size: .7rem; } .day-total { font-family: var(--mono); }
+.notebook-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; margin: 1.25rem 0; }
+.notebook-toolbar .notebook-tools { margin: 0; }
+.goals-toggle { display: inline-flex; align-items: center; gap: .65rem; color: var(--muted); font-size: .8rem; border-color: transparent; }
+.switch-track { width: 30px; height: 18px; border: 1px solid #555; border-radius: 12px; padding: 3px; display: inline-flex; align-items: center; }
+.switch-track::after { content: ''; width: 10px; height: 10px; background: #999; border-radius: 50%; }
+.goals-toggle[aria-checked="true"] { color: var(--text); }
+.goals-toggle[aria-checked="true"] .switch-track { background: var(--accent); border-color: var(--accent); justify-content: flex-end; }
+.goals-toggle[aria-checked="true"] .switch-track::after { background: #000; }
+#daysList { display: grid; gap: 1rem; }
+.day-card { border: 1px solid var(--line); border-radius: 12px; padding: 1.25rem; min-width: 0; }
+.day-card.is-today { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.day-header { display: flex; justify-content: space-between; align-items: center; gap: .75rem; margin-bottom: .75rem; }
+.day-header h3 { display: inline; margin-right: .5rem; font-size: 1rem; } .today-label { color: var(--accent); margin-left: .5rem; font-size: .65rem; letter-spacing: .06em; } .day-total { font-family: var(--mono); font-size: 1.25rem; font-weight: 600; white-space: nowrap; }
+.is-today .day-total { color: var(--accent); }
+.entries-header { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: .35rem; }
+.entries-header h4 { margin: 0; color: var(--muted); font-size: .7rem; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; }
+.add-time { color: var(--accent); font-size: .8rem; border-color: transparent; }
+.day-entries .entry-row { background: #0b0b0b; border: 1px solid #202020; border-radius: 7px; padding: .75rem; margin-bottom: .5rem; gap: .75rem; }
+.day-entries .entry-description > span { font-weight: 550; }
+.day-entries .row-actions button { font-size: .75rem; }
+.day-entries .row-actions .danger { color: var(--muted); border-color: transparent; }
+.day-entries .row-actions .danger:hover { color: var(--danger); }
+.day-entries > div > .muted { padding: .4rem 0 .8rem; }
+.day-notes { border-top: 1px solid var(--line); }
+.day-notes summary { padding: .75rem 0; color: var(--text); }
+.note-hint { color: var(--muted); font-size: .75rem; margin-left: .75rem; }
+.day-card > .day-notes { margin-top: 1rem; }
 .day-goal { display: flex; align-items: center; gap: 1rem; margin-bottom: .8rem; } progress { accent-color: var(--accent); height: 4px; width: 110px; flex-shrink: 0; }
 .day-subjects { display: flex; flex-wrap: wrap; gap: .5rem; font-size: .8rem; color: var(--muted); margin-bottom: .85rem; } .day-subjects span { background: var(--surface); padding: .2rem .45rem; border-radius: 3px; overflow-wrap: anywhere; }
 .day-subjects button { border: 0; color: var(--muted); padding: 0 .2rem; min-height: 28px; min-width: 28px; }
-.day-card textarea { min-height: 90px; } .day-footer { display: flex; justify-content: space-between; align-items: start; gap: .5rem; margin-top: .5rem; } .day-actions { border: 0; text-align: right; } .day-actions summary { padding: .2rem .5rem; } .day-actions .detail-tools { justify-content: flex-end; } .day-card > details { margin-top: .8rem; }
+.day-card textarea { min-height: 110px; } .day-footer { display: flex; justify-content: flex-end; align-items: start; gap: .5rem; } .day-actions { border: 0; text-align: right; } .day-actions summary { padding: .3rem 0; font-size: .75rem; } .day-actions .detail-tools { justify-content: flex-end; }
 .entry-row, .subject-row { display: flex; align-items: center; justify-content: space-between; gap: .65rem; padding: .65rem 0; border-bottom: 1px solid var(--line); } .entry-description, .subject-row > span { min-width: 0; overflow-wrap: anywhere; } .entry-description small { display: block; color: var(--muted); }
 .row-actions { display: flex; gap: .35rem; flex-shrink: 0; } .row-actions button { font-size: .75rem; padding: .4rem .55rem; }
 .app-footer { text-align: center; color: var(--muted); font-size: .75rem; margin-top: 2.5rem; }
@@ -51,6 +77,7 @@ dialog { width: min(620px, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); 
 .focus-view .tabs, .focus-view .timer-secondary, .focus-view .app-footer, .focus-view #historyToggle, .focus-view #settingsToggle, .focus-view #quickAddSubject { display: none; } .focus-view .timer-hero { padding-top: 12vh; } .focus-view .app-header { border-bottom: 1px solid var(--line); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } [hidden] { display: none !important; }
 @media (max-width: 600px) {
+  .day-card { padding: 1rem; } .day-total { font-size: 1.1rem; } .day-header > div { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; } .day-header h3 { margin-right: .25rem; }
   .app-container { padding: 1rem; } .app-header { flex-wrap: wrap; padding-bottom: 1rem; } .header-actions { width: 100%; justify-content: space-between; } .header-actions button { padding: .5rem; } .tabs { margin-bottom: 1.5rem; }
   .controls { grid-template-columns: 1fr 1fr; gap: .5rem; } .controls .primary { grid-column: 1 / -1; } .digits { font-size: clamp(2rem, 10vw, 3.5rem); } .timer-hero { padding: 2rem 0; } .timer-tools { flex-wrap: wrap; }
   .week-summary { grid-template-columns: 1fr 1fr; } .week-summary > div:last-child { grid-column: 1 / -1; } .field { flex-direction: column; align-items: stretch; gap: .35rem; } .field input, .field select { width: 100%; }

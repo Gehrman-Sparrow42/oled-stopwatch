@@ -8,7 +8,7 @@
   const KEY = 'chrono_focus_data_v2';
   const DRAFT_KEY = 'chrono_focus_draft_v2';
   const DEFAULTS = Object.freeze({ theme: 'emerald', precision: 2, sound: true,
-    goal: 4, weekStart: 'monday', dateFormat: 'DD/MM', chime: 0, idle: 120, confirm: 'always' });
+    goal: 4, showGoals: false, weekStart: 'monday', dateFormat: 'DD/MM', chime: 0, idle: 120, confirm: 'always' });
   const clone = value => JSON.parse(JSON.stringify(value));
   const id = () => globalThis.crypto?.randomUUID?.() || `id_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
@@ -30,6 +30,7 @@
       chime: [0,25,30,45,50,60], idle: [0,60,90,120,180,240], confirm: ['always','auto'] };
     for (const [key, values] of Object.entries(options)) if (values.includes(input[key])) out[key] = input[key];
     if (typeof input.sound === 'boolean') out.sound = input.sound;
+    if (typeof input.showGoals === 'boolean') out.showGoals = input.showGoals;
     return out;
   }
   function empty() {

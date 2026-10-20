@@ -9,6 +9,26 @@ function storage(data) {
   const values = new Map([[C.KEY,JSON.stringify(data)]]);
   return { getItem: key => values.get(key) ?? null, setItem: (key,value) => values.set(key,value) };
 }
+
+test('goal visibility defaults off for existing records and toggles without changing progress', () => {
+  const data = fixture(); delete data.settings.showGoals; data.settings.goal = 6;
+  C.commitSession(data,'existing-session',[{date,duration:124*minute,subjectId:data.subjects[0].id}]);
+  data.notes[date] = 'Existing daily note';
+  const draft = C.newDraft(data.subjects[0].id); draft.elapsed = 10*minute; draft.blockElapsed = 10*minute;
+  const {data: restored, draft: restoredDraft} = C.backup({...data, draft});
+  assert.equal(restored.settings.showGoals,false);
+  assert.deepEqual(restoredDraft,draft);
+  const store = new C.Store(storage(restored),restored);
+  for (const visible of [true,false,true]) {
+    store.commit(next => { next.settings.showGoals = visible; });
+    const reloaded = new C.Store(store.storage,C.validate(JSON.parse(store.storage.getItem(C.KEY))));
+    assert.equal(reloaded.data.settings.showGoals,visible);
+    assert.equal(reloaded.data.settings.goal,6);
+    assert.deepEqual(reloaded.data.entries,data.entries);
+    assert.deepEqual(reloaded.data.sessions,data.sessions);
+    assert.deepEqual(reloaded.data.notes,data.notes);
+  }
+});
 test('completed blocks stay provisional; 20 + 10 minutes commits once', () => {
   const data = fixture(), draft = C.newDraft(data.subjects[0].id), start = Date.now()-30*minute;
   draft.running = true; draft.startedAt = start;
