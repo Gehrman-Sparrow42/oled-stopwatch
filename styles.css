@@ -89,7 +89,7 @@ dialog { width: min(620px, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); 
 .dialog-status, .dialog-warning { position: sticky; top: 0; padding: .6rem; background: #111; z-index: 1; }
 .history-item { padding: 1rem 0; border-bottom: 1px solid var(--line); } .history-item > p { margin: .35rem 0; }
 .toast, .undo-bar { position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%); max-width: calc(100% - 2rem); padding: .8rem 1rem; border: 1px solid #444; border-radius: 6px; background: #181818; z-index: 20; font-size: .85rem; } .undo-bar { display: flex; align-items: center; gap: 1rem; z-index: 21; } .undo-bar button { color: var(--accent); }
-.focus-view .tabs, .focus-view .timer-secondary, .focus-view .app-footer, .focus-view #historyToggle, .focus-view #settingsToggle, .focus-view #quickAddSubject { display: none; } .focus-view .timer-hero { padding-top: 12vh; } .focus-view .app-header { border-bottom: 1px solid var(--line); }
+.focus-view .tabs, .focus-view .timer-secondary, .focus-view .app-footer, .focus-view #historyToggle, .focus-view #settingsToggle, .focus-view #quickAddSubject, .focus-view #quickRenameSubject { display: none; } .focus-view .timer-hero { padding-top: 12vh; } .focus-view .app-header { border-bottom: 1px solid var(--line); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } [hidden] { display: none !important; }
 @media (max-width: 600px) {
   .day-card { padding: 1rem; } .day-total { font-size: 1.1rem; } .day-header > div { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; } .day-header h3 { margin-right: .25rem; }

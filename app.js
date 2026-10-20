@@ -585,6 +585,7 @@
       const on = (id,handler,event = 'click') => $(id).addEventListener(event,handler);
       on('btnStart',() => this.toggleTimer()); on('btnLap',() => this.nextBlock()); on('btnReset',() => this.endSession()); on('activeSubject',event => this.chooseSubject(event.target.value),'change');
       on('quickAddSubject',() => { this.open('settingsModal'); $('subjectName').focus(); }); on('focusToggle',() => this.toggleFocus());
+      on('quickRenameSubject',() => this.editSubject(this.draft.activeSubjectId));
       on('settingsToggle',() => { this.renderSettings(); this.open('settingsModal'); }); on('historyToggle',() => { this.renderHistory(); this.open('historyModal'); });
       on('tabTimer',() => this.switchTab('timer')); on('tabDiary',() => this.switchTab('diary'));
       on('goalsToggle',() => this.mutate(data => { data.settings.showGoals = !data.settings.showGoals; },null));

@@ -27,6 +27,21 @@ function harness(seed = {}) {
 const fixture = () => C.migrate({customSubjects:['Math','Coding']});
 const date = '2026-10-06';
 
+test('renaming the selected subject preserves saved progress and an active draft', () => {
+  const data=fixture(); C.commitSession(data,'saved',[{date,subjectId:data.subjects[0].id,duration:120000}]); data.notes[date]='Original notes';
+  const {app,node,values}=harness({[C.KEY]:JSON.stringify(data)}); app.load();
+  app.draft.elapsed=45000; app.draft.blockElapsed=45000; app.draft.running=true; app.draft.startedAt=Date.now();
+  const draft=JSON.stringify(app.draft), entries=JSON.stringify(app.data.entries), sessions=JSON.stringify(app.data.sessions);
+  app.editSubject(app.draft.activeSubjectId);
+  assert.equal(app.opened,'subjectModal'); assert.equal(node('renameSubjectName').value,'Math');
+  node('renameSubjectName').value='Calculus'; app.renameSubject({preventDefault(){}});
+  assert.equal(app.subjectName(app.draft.activeSubjectId),'Calculus'); assert.equal(JSON.stringify(app.draft),draft);
+  assert.equal(JSON.stringify(app.data.entries),entries); assert.equal(JSON.stringify(app.data.sessions),sessions); assert.equal(app.data.notes[date],'Original notes');
+  assert.equal(JSON.parse(values.get(C.KEY)).subjects[0].name,'Calculus');
+  node('renameSubjectName').value=' Coding '; app.renameSubject({preventDefault(){}});
+  assert.equal(app.subjectName(app.draft.activeSubjectId),'Calculus'); assert.match(node('subjectError').textContent,/already exists/);
+});
+
 test('an open notebook refreshes once when the local date advances', () => {
   const data=fixture(), {app}=harness({[C.KEY]:JSON.stringify(data)}); app.load();
   app.tab='diary'; app.diaryDate='2000-01-01'; let refreshes=0;
