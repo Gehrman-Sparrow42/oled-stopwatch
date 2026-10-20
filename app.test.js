@@ -41,6 +41,10 @@ test('notebook combines repeated subjects while retaining every original edit ta
   const buttons = group.children[1].children.flatMap(row => row.children[1].children);
   assert.deepEqual(Array.from(buttons,button => button.dataset.value),['a','a','c','c']);
   assert.equal(app.groupedEntriesUI(entries,new Set([group.dataset.detail])).children[0].open,true);
+  const single=list.children[1]; assert.equal(single.tag,'details'); assert.equal(single.className,group.className); assert.equal(single.open,false);
+  assert.equal(single.children[0].children[0].children[1].textContent,'1 entry · View details');
+  assert.equal(single.children[0].children[1].textContent,'1m');
+  assert.deepEqual(Array.from(single.children[1].children[0].children[1].children,button => button.dataset.value),['b','b']);
   assert.equal(JSON.stringify(entries),before);
   assert.equal(app.groupedEntriesUI([]).children[0].textContent,'No saved study entries.');
 });

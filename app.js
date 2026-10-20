@@ -239,10 +239,9 @@
         groups.get(entry.subjectId).push(entry);
       }
       for (const [subjectId,items] of groups) {
-        if (items.length === 1) { list.append(this.entriesUI(items)); continue; }
         const group = el('details',undefined,'entry-group'); group.dataset.detail = `subject-${items[0].date}-${subjectId}`; group.open = expanded.has(group.dataset.detail);
         const summary = el('summary'), description = el('span',undefined,'group-description');
-        description.append(el('strong',this.subjectName(subjectId)),el('small',`${items.length} entries · View details`));
+        description.append(el('strong',this.subjectName(subjectId)),el('small',`${items.length} ${items.length === 1 ? 'entry' : 'entries'} · View details`));
         if (this.settings.showTimeRanges) {
           const timed = items.filter(item => item.startedAt && item.endedAt), missing = items.length-timed.length;
           const ranges = timed.map(item => this.timeRange(item));
