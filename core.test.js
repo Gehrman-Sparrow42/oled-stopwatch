@@ -10,6 +10,28 @@ function storage(data) {
   return { getItem: key => values.get(key) ?? null, setItem: (key,value) => values.set(key,value) };
 }
 
+test('daily average includes elapsed calendar days, including today and days without study', () => {
+  const data=fixture(), sid=data.subjects[0].id, monday=new Date(2026,9,19);
+  data.entries.push({id:'mon',date:'2026-10-19',subjectId:sid,duration:120*minute,source:'manual'},
+    {id:'tue',date:'2026-10-20',subjectId:sid,duration:60*minute,source:'manual'},
+    {id:'future',date:'2026-10-23',subjectId:sid,duration:300*minute,source:'manual'});
+  assert.deepEqual(C.weekAverage(data,monday,new Date(2026,9,19)),{days:1,total:120*minute,average:120*minute});
+  assert.deepEqual(C.weekAverage(data,monday,new Date(2026,9,20,23,59)),{days:2,total:180*minute,average:90*minute});
+  assert.deepEqual(C.weekAverage(data,monday,new Date(2026,9,21)),{days:3,total:180*minute,average:60*minute});
+  assert.equal(C.weekAverage(data,monday,new Date(2026,9,26)).days,7);
+  assert.equal(C.weekAverage(data,monday,new Date(2026,9,26)).average,480*minute/7);
+  assert.deepEqual(C.weekAverage(data,monday,new Date(2026,9,18)),{days:0,total:0,average:null});
+  assert.equal(C.weekAverage(fixture(),monday,new Date(2026,9,20)).average,0);
+});
+
+test('daily average respects Sunday-start weeks and calendar boundaries', () => {
+  const data=fixture();
+  assert.equal(C.weekAverage(data,new Date(2026,9,18),new Date(2026,9,20)).days,3);
+  assert.equal(C.weekAverage(data,new Date(2025,11,29),new Date(2026,0,1)).days,4);
+  assert.equal(C.weekAverage(data,new Date(2024,1,26),new Date(2024,2,1)).days,5);
+  assert.equal(C.weekAverage(data,new Date(2026,2,23),new Date(2026,2,29)).days,7);
+});
+
 test('goal visibility defaults off for existing records and toggles without changing progress', () => {
   const data = fixture(); delete data.settings.showGoals; data.settings.goal = 6;
   C.commitSession(data,'existing-session',[{date,duration:124*minute,subjectId:data.subjects[0].id}]);

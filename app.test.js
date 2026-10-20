@@ -27,6 +27,14 @@ function harness(seed = {}) {
 const fixture = () => C.migrate({customSubjects:['Math','Coding']});
 const date = '2026-10-06';
 
+test('an open notebook refreshes once when the local date advances', () => {
+  const data=fixture(), {app}=harness({[C.KEY]:JSON.stringify(data)}); app.load();
+  app.tab='diary'; app.diaryDate='2000-01-01'; let refreshes=0;
+  app.renderDiary=()=>{refreshes++; app.diaryDate=C.dateKey();};
+  app.tick(); app.tick(); assert.equal(refreshes,1);
+  app.tab='timer'; app.diaryDate='2000-01-01'; app.tick(); assert.equal(refreshes,1);
+});
+
 test('notebook combines repeated subjects while retaining every original edit target', () => {
   const data = fixture(), {app} = harness({[C.KEY]:JSON.stringify(data)}); app.load();
   const entries = [

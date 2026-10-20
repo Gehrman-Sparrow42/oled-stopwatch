@@ -165,6 +165,7 @@
         C.pause(this.draft,now); this.draft.needsReview = true; this.persistDraft(); this.toast('Clock change or interrupted timing detected. Review this session before saving.');
       }
       this.lastWall = now; this.lastMono = mono;
+      if (this.tab === 'diary' && this.diaryDate !== C.dateKey(new Date(now))) this.renderDiary();
       if (this.draft.running && this.settings.chime) {
         const bucket = Math.floor(C.draftTimes(this.draft).total/(this.settings.chime*60000));
         if (bucket > this.draft.lastChime) { this.draft.lastChime = bucket; this.tone(true); this.toast(`${bucket*this.settings.chime} minutes of study.`); }
@@ -256,6 +257,7 @@
     }
     renderDiaryIfVisible() { if (this.tab === 'diary') this.renderDiary(); }
     renderDiary() {
+      this.diaryDate = C.dateKey();
       $('goalsToggle').setAttribute('aria-checked',String(this.settings.showGoals));
       $('timeRangesToggle').setAttribute('aria-checked',String(this.settings.showTimeRanges));
       const expanded = new Set([...$('daysList').querySelectorAll('details[open]')].map(n => n.dataset.detail));
@@ -297,7 +299,9 @@
         actions.append(el('summary','Day actions'),tools); footer.append(actions); card.append(footer); days.append(card);
       }
       $('weekTitle').textContent = `${this.displayDate(C.dateKey(this.week))} – ${this.displayDate(lastKey)} · ${this.week.getFullYear()}`;
-      $('weekTotal').textContent = pretty(weekTotal); $('weekAverage').textContent = pretty(weekTotal/7);
+      const average = C.weekAverage(this.data,this.week);
+      $('weekTotal').textContent = pretty(weekTotal); $('weekAverage').textContent = average.average === null ? '—' : pretty(average.average);
+      $('weekAverage').title = average.days ? `Average over ${average.days} ${average.days === 1 ? 'day' : 'days'}, through today` : 'This week has not started yet';
       const top = [...bySubject].sort((a,b) => b[1]-a[1])[0]; $('weekTop').textContent = top ? this.subjectName(top[0]) : '—';
       if (focused) { const note = [...days.querySelectorAll('textarea')].find(n => n.dataset.noteDate === focused); if (note) { note.focus(); note.setSelectionRange(start,end); } }
     }

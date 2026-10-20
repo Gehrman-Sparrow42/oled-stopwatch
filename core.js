@@ -181,6 +181,18 @@
     }
     return { total, bySubject };
   }
+  function weekAverage(data, weekStart, today = new Date()) {
+    const todayKey = dateKey(today); let days = 0, total = 0;
+    for (let i=0;i<7;i++) {
+      // Advance calendar dates rather than adding 24h, so DST cannot change
+      // the number of days included in the average.
+      const day = new Date(weekStart); day.setDate(day.getDate()+i);
+      const key = dateKey(day);
+      if (key > todayKey) break;
+      days++; total += totals(data,key).total;
+    }
+    return {days,total,average:days ? total/days : null};
+  }
   function migrate(legacy = {}) {
     const data = empty(); data.settings = settings(legacy.settings || { goal: legacy.dailyGoalHours,
       weekStart: legacy.weekStart, dateFormat: legacy.dateFormat });
@@ -351,5 +363,5 @@
   }
   return { KEY, DRAFT_KEY, MIN_BLOCK_MS, DEFAULTS, clone, id, normalize, positive, dateKey, validDate, settings, empty,
     subject, allocate, duration, studyLine, parseDate, parseImport, syncEntries, applyImport, applySync,
-    commitSession, totals, migrate, validate, backup, newDraft, draftTimes, checkpoint, pause, closeBlock, validateDraft, Store };
+    commitSession, totals, weekAverage, migrate, validate, backup, newDraft, draftTimes, checkpoint, pause, closeBlock, validateDraft, Store };
 });
