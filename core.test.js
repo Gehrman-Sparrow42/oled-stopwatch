@@ -75,9 +75,9 @@ test('recovered older drafts do not invent a start time for pre-existing elapsed
   assert.equal(draft.blocks[0].duration,11*minute);
   assert.equal(draft.blocks[0].startedAt,undefined);
   assert.equal(draft.blocks[0].endedAt,undefined);
-  C.closeBlock(draft,start+2*minute);
+  C.closeBlock(draft,start+3*minute);
   assert.equal(draft.blocks[1].startedAt,new Date(start+minute).toISOString());
-  assert.equal(draft.blocks[1].endedAt,new Date(start+2*minute).toISOString());
+  assert.equal(draft.blocks[1].endedAt,new Date(start+3*minute).toISOString());
 });
 test('discarding a draft with completed blocks never touches committed records', () => {
   const data = fixture(), original = C.clone(data), draft = C.newDraft(data.subjects[0].id);
@@ -96,6 +96,54 @@ test('subject transitions preserve attribution and pause excludes break time', (
   C.commitSession(data,draft.id,draft.blocks);
   assert.deepEqual([...C.totals(data).bySubject.values()],[20*minute,20*minute]);
   assert.equal(C.totals(data).total,40*minute);
+});
+
+test('timer minimum is exact and discarded blocks leave a valid zeroed draft', () => {
+  const data = fixture(), start = Date.parse('2026-10-20T10:00:00.000Z');
+  for (const duration of [1,119999,120000,120001]) {
+    const draft = C.newDraft(data.subjects[0].id); draft.running=true; draft.startedAt=start;
+    assert.equal(C.closeBlock(draft,start+duration),duration>=120000);
+    assert.equal(draft.elapsed,duration>=120000 ? duration : 0);
+    assert.equal(draft.blockElapsed,0); assert.equal(draft.blockStartedAt,undefined);
+    assert.equal(draft.blocks.length,duration>=120000 ? 1 : 0);
+    assert.equal(C.validateDraft(draft,data).running,true);
+  }
+});
+
+test('short subject switches never transfer time or timestamps into the next subject', () => {
+  const data = fixture(), draft = C.newDraft(data.subjects[0].id), start = Date.parse('2026-10-20T10:00:00.000Z');
+  draft.running=true; draft.startedAt=start;
+  assert.equal(C.closeBlock(draft,start+45000),false);
+  draft.activeSubjectId=data.subjects[1].id;
+  C.closeBlock(draft,start+45000+5*minute);
+  draft.activeSubjectId=data.subjects[0].id;
+  C.pause(draft,start+45000+7*minute); C.closeBlock(draft,start+45000+7*minute);
+  C.commitSession(data,draft.id,draft.blocks);
+  assert.deepEqual(data.entries.map(e => [e.subjectId,e.duration]),[[data.subjects[1].id,5*minute],[data.subjects[0].id,2*minute]]);
+  assert.equal(data.entries[0].startedAt,new Date(start+45000).toISOString());
+  assert.equal(C.totals(data).total,7*minute);
+  assert.equal(C.validateDraft(draft,data).elapsed,7*minute);
+});
+
+test('pause and resume accumulate toward the minimum while breaks never count', () => {
+  const data = fixture(), draft = C.newDraft(data.subjects[0].id), start = Date.parse('2026-10-20T10:00:00.000Z');
+  draft.running=true; draft.startedAt=start; C.pause(draft,start+minute);
+  const restored=C.validateDraft(JSON.parse(JSON.stringify(draft)),data);
+  restored.running=true; restored.startedAt=start+4*minute;
+  assert.equal(C.closeBlock(restored,start+5*minute),true);
+  assert.equal(restored.blocks[0].duration,2*minute);
+  assert.equal(restored.blocks[0].endedAt,new Date(start+5*minute).toISOString());
+});
+
+test('saving filters new short blocks without modifying existing history or creating empty sessions', () => {
+  const data = fixture(), sid=data.subjects[0].id;
+  data.entries.push({id:'old-short',date,subjectId:sid,duration:1000,source:'manual'});
+  const before=C.clone(data);
+  assert.equal(C.commitSession(data,'all-short',[{date,subjectId:sid,duration:119999}]),false);
+  assert.deepEqual(data,before);
+  assert.equal(C.commitSession(data,'mixed',[{date,subjectId:sid,duration:119999},{date,subjectId:sid,duration:120000}]),true);
+  assert.equal(data.entries.length,2); assert.equal(C.totals(data).total,121000);
+  assert.equal(C.validate(data).entries[0].duration,1000);
 });
 test('draft persistence and restoration do not count checkpoint time twice', () => {
   const data = fixture(), draft = C.newDraft(data.subjects[0].id), now = Date.now();
@@ -127,7 +175,7 @@ test('inconsistent legacy subject totals are scaled to preserve the recorded dai
 });
 test('backup round trip includes settings, notes, IDs, entries, and paused-capable draft', () => {
   const data = fixture(); data.settings.theme = 'violet'; data.notes[date] = '<b>literal</b>';
-  C.commitSession(data,'s1',[{date,subjectId:data.subjects[0].id,duration:minute}]);
+  C.commitSession(data,'s1',[{date,subjectId:data.subjects[0].id,duration:2*minute}]);
   const draft = C.newDraft(data.subjects[1].id);
   const result = C.backup(JSON.parse(JSON.stringify({...data,draft})));
   assert.deepEqual(result.data,data); assert.deepEqual(result.draft,draft);
@@ -192,7 +240,7 @@ test('storage failures leave committed data and in-memory state unchanged', () =
   assert.throws(() => store.commit(d => { d.notes[date] = 'unsaved'; }),/Quota/); assert.deepEqual(store.data,data); assert.equal(memory.getItem(C.KEY),before);
 });
 test('duplicate subjects are rejected, removed subjects retain historical references', () => {
-  const data = fixture(); C.commitSession(data,'s',[{date,subjectId:data.subjects[0].id,duration:minute}]);
+  const data = fixture(); C.commitSession(data,'s',[{date,subjectId:data.subjects[0].id,duration:2*minute}]);
   data.subjects[0].hidden = true; assert.equal(C.validate(data).entries[0].subjectId,data.subjects[0].id);
   data.subjects[1].name = ' math '; assert.throws(() => C.validate(data),/subject/);
 });

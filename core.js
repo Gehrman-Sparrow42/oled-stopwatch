@@ -7,6 +7,7 @@
   'use strict';
   const KEY = 'chrono_focus_data_v2';
   const DRAFT_KEY = 'chrono_focus_draft_v2';
+  const MIN_BLOCK_MS = 2 * 60000;
   const DEFAULTS = Object.freeze({ theme: 'emerald', precision: 2, sound: true,
     goal: 4, showGoals: false, showTimeRanges: false, weekStart: 'monday', dateFormat: 'DD/MM', chime: 0, idle: 120, confirm: 'always' });
   const clone = value => JSON.parse(JSON.stringify(value));
@@ -165,6 +166,8 @@
       if (!positive(b.duration) || !validDate(b.date) || !data.subjects.some(s => s.id === b.subjectId)) throw new Error('Check every block’s duration, date, and subject.');
       validateTimeRange(b);
     }
+    blocks = blocks.filter(block => block.duration >= MIN_BLOCK_MS);
+    if (!blocks.length) return false;
     data.sessions.unshift({ id: sessionId, createdAt: new Date().toISOString(), legacy: false });
     for (const block of blocks) data.entries.push({ id: id(), date: block.date, subjectId: block.subjectId,
       duration: block.duration, source: 'session', sessionId,
@@ -288,11 +291,13 @@
   function closeBlock(draft, now = Date.now()) {
     checkpoint(draft,now);
     if (!draft.blockElapsed) return false;
-    draft.blocks.push({ duration: draft.blockElapsed, subjectId: draft.activeSubjectId, date: dateKey(new Date(now)), legacyCredited: false,
+    const keep = draft.blockElapsed >= MIN_BLOCK_MS;
+    if (keep) draft.blocks.push({ duration: draft.blockElapsed, subjectId: draft.activeSubjectId, date: dateKey(new Date(now)), legacyCredited: false,
       ...(draft.blockStartedAt !== undefined ? {startedAt: new Date(draft.blockStartedAt).toISOString(), endedAt: new Date(draft.blockEndedAt).toISOString()} : {}) });
+    else draft.elapsed -= draft.blockElapsed;
     delete draft.blockStartedAt; delete draft.blockEndedAt;
     delete draft.blockRangeUnknown;
-    draft.blockElapsed = 0; return true;
+    draft.blockElapsed = 0; return keep;
   }
   function validateDraft(input, data) {
     if (!input) return null;
@@ -344,7 +349,7 @@
       return this.commit(next => { Object.assign(next,previous); });
     }
   }
-  return { KEY, DRAFT_KEY, DEFAULTS, clone, id, normalize, positive, dateKey, validDate, settings, empty,
+  return { KEY, DRAFT_KEY, MIN_BLOCK_MS, DEFAULTS, clone, id, normalize, positive, dateKey, validDate, settings, empty,
     subject, allocate, duration, studyLine, parseDate, parseImport, syncEntries, applyImport, applySync,
     commitSession, totals, migrate, validate, backup, newDraft, draftTimes, checkpoint, pause, closeBlock, validateDraft, Store };
 });

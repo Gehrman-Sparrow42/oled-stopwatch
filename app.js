@@ -243,7 +243,12 @@
         const group = el('details',undefined,'entry-group'); group.dataset.detail = `subject-${items[0].date}-${subjectId}`; group.open = expanded.has(group.dataset.detail);
         const summary = el('summary'), description = el('span',undefined,'group-description');
         description.append(el('strong',this.subjectName(subjectId)),el('small',`${items.length} entries · View details`));
-        if (this.settings.showTimeRanges) description.append(el('small',items.map(item => this.timeRange(item)).join(' · '),'entry-time-range'));
+        if (this.settings.showTimeRanges) {
+          const timed = items.filter(item => item.startedAt && item.endedAt), missing = items.length-timed.length;
+          const ranges = timed.map(item => this.timeRange(item));
+          if (missing) ranges.push(`${missing} ${missing === 1 ? 'entry' : 'entries'} without recorded times`);
+          description.append(el('small',ranges.join(' · '),'entry-time-range'));
+        }
         summary.append(description,el('span',pretty(items.reduce((total,item) => total+item.duration,0)),'group-total'));
         group.append(summary,this.entriesUI(items)); list.append(group);
       }
@@ -309,8 +314,12 @@
     }
     renderHistory() {
       const list = $('historyList'); list.replaceChildren();
+      let visible = 0;
       for (const session of this.data.sessions) {
         const entries = this.data.entries.filter(e => e.sessionId === session.id);
+        // Keep saved IDs in storage to prevent replaying an old recovered draft.
+        if (!session.legacy && !entries.length) continue;
+        visible++;
         const total = session.legacy ? session.total : entries.reduce((sum,e) => sum+e.duration,0);
         const first = entries[0]?.subjectId || session.subjectId || this.draft.activeSubjectId;
         const item = el('article',undefined,'history-item'); item.append(el('h3',session.legacy ? `Historical session · ${session.label || 'Unknown date'}` : new Date(session.createdAt).toLocaleString()),el('p',`${pretty(total)} · ${entries.length || session.blocks?.length || 0} blocks`));
@@ -318,7 +327,7 @@
         const details = el('details'); details.append(el('summary','View / edit entries'),this.entriesUI(entries,session.legacy ? session.blocks : null)); item.append(details);
         const tools = el('div',undefined,'detail-tools'); tools.append(button('Start new session','new-session',first),button('Delete session','delete-session',session.id,'danger')); item.append(tools); list.append(item);
       }
-      if (!this.data.sessions.length) list.append(el('p','Saved sessions will appear here.','muted')); $('clearHistory').disabled = !this.data.sessions.length;
+      if (!visible) list.append(el('p','Saved sessions will appear here.','muted')); $('clearHistory').disabled = !visible;
     }
     toggleTimer() {
       if (this.stale) return;
@@ -326,14 +335,24 @@
       else { this.draft.running = true; this.draft.startedAt = Date.now(); this.lastWall = Date.now(); this.lastMono = performance.now(); this.draft.lastChime = this.settings.chime ? Math.floor(this.draft.elapsed/(this.settings.chime*60000)) : 0; }
       this.persistDraft(); this.startFrames(); this.renderTimer(); this.tone();
     }
-    nextBlock() { if (this.stale || !this.draft.running) return; C.closeBlock(this.draft); this.persistDraft(); this.renderBlocks(); this.tone(); this.toast('Block added to the draft.'); }
+    nextBlock() {
+      if (this.stale || !this.draft.running) return;
+      const kept = C.closeBlock(this.draft); this.persistDraft(); this.renderTimer(); this.renderBlocks(); this.tone();
+      this.toast(kept ? 'Block added to the draft.' : 'Block under 2 minutes discarded.');
+    }
     chooseSubject(sid) {
       if (this.stale || sid === this.draft.activeSubjectId || !this.data.subjects.some(s => s.id === sid)) return;
-      C.closeBlock(this.draft); this.draft.activeSubjectId = sid; this.persistDraft(); this.renderAll();
+      const hadTime = C.draftTimes(this.draft).block > 0, kept = C.closeBlock(this.draft);
+      this.draft.activeSubjectId = sid; this.persistDraft(); this.renderAll();
+      if (hadTime && !kept) this.toast('Previous subject’s block under 2 minutes discarded.');
     }
     endSession() {
       if (this.stale || !C.draftTimes(this.draft).total) return;
       C.pause(this.draft); C.closeBlock(this.draft); this.persistDraft(); this.renderBlocks(); this.reviewBlocks = C.clone(this.draft.blocks.filter(b => !b.legacyCredited));
+      if (!this.reviewBlocks.some(block => block.duration >= C.MIN_BLOCK_MS)) {
+        if (this.resetDraft()) this.toast('Blocks under 2 minutes discarded. No study time saved.');
+        return;
+      }
       if (this.settings.confirm === 'auto' && !this.draft.needsReview && !this.draft.legacyNotice) { this.saveSession(false); return; }
       this.showReview();
     }
@@ -367,8 +386,13 @@
             const values = C.allocate(total,blocks.map(b => b.duration)); blocks.forEach((b,i) => b.duration = values[i]);
           }
         }
-        if (!this.mutate(data => C.commitSession(data,this.draft.id,blocks),null)) return;
-        this.resetDraft(true); this.close('reviewModal'); this.toast('Session saved once to your notebook.');
+        const kept = blocks.filter(block => block.duration >= C.MIN_BLOCK_MS);
+        if (!kept.length) {
+          if (this.resetDraft()) { this.close('reviewModal'); this.toast('Blocks under 2 minutes discarded. No study time saved.'); }
+          return;
+        }
+        if (!this.mutate(data => C.commitSession(data,this.draft.id,kept),null)) return;
+        this.resetDraft(true); this.close('reviewModal'); this.toast(kept.length < blocks.length ? 'Session saved. Blocks under 2 minutes discarded.' : 'Session saved once to your notebook.');
       } catch (error) { if (!readInputs) this.showReview(); $('reviewError').textContent = error.message; }
     }
     resetDraft(committed = false) {

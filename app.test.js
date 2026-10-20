@@ -7,7 +7,7 @@ const C = require('./core');
 function harness(seed = {}) {
   const values = new Map(Object.entries(seed)); const nodes = new Map();
   const node = name => {
-    if (!nodes.has(name)) nodes.set(name,{value:'',textContent:'',hidden:true,open:false,disabled:false,replaceChildren(){},append(){},focus(){}});
+    if (!nodes.has(name)) nodes.set(name,{value:'',textContent:'',hidden:true,open:false,disabled:false,children:[],replaceChildren(...children){this.children=children;},append(...children){this.children.push(...children);},focus(){}});
     return nodes.get(name);
   };
   const storage = { getItem:key => values.get(key) ?? null, setItem(key,value) {
@@ -55,13 +55,71 @@ test('time ranges are opt-in and missing historical timestamps are never inferre
   assert.equal(app.timeRange({duration:60000}),'Time range not recorded');
 });
 
+test('combined timing summaries state the missing count once and retain individual statuses', () => {
+  const data=fixture(), {app}=harness({[C.KEY]:JSON.stringify(data)}); app.load(); app.data.settings.showTimeRanges=true;
+  const base={date,subjectId:data.subjects[0].id,duration:120000,source:'manual'};
+  const entries=[{...base,id:'a'},{...base,id:'b'},{...base,id:'c',startedAt:'2026-10-06T10:00:00.000Z',endedAt:'2026-10-06T10:02:00.000Z'}];
+  const group=app.groupedEntriesUI(entries).children[0], label=group.children[0].children[0].children[2].textContent;
+  assert.match(label,/2 entries without recorded times/); assert.doesNotMatch(label,/Time range not recorded/);
+  assert.equal(group.children[1].children[0].children[0].children[2].textContent,'Time range not recorded');
+});
+
+test('empty sessions disappear from history while their replay protection remains stored', () => {
+  const data=fixture(); C.commitSession(data,'saved',[{date,subjectId:data.subjects[0].id,duration:120000}]); data.entries=[];
+  const {app,node}=harness({[C.KEY]:JSON.stringify(data)}); app.load(); const before=JSON.stringify(app.data);
+  app.renderHistory();
+  assert.equal(node('historyList').children.length,1); assert.equal(node('historyList').children[0].textContent,'Saved sessions will appear here.');
+  assert.equal(node('clearHistory').disabled,true); assert.equal(JSON.stringify(app.data),before);
+  assert.equal(C.commitSession(app.data,'saved',[{date,subjectId:data.subjects[0].id,duration:120000}]),false);
+});
+
+test('short sessions end automatically without a review or phantom saved session', () => {
+  for (const confirm of ['always','auto']) {
+    const data=fixture(), {app}=harness({[C.KEY]:JSON.stringify(data)}); app.load(); app.data.settings.confirm=confirm;
+    app.draft.elapsed=119999; app.draft.blockElapsed=119999; app.endSession();
+    assert.equal(app.draft.elapsed,0); assert.equal(app.data.entries.length,0); assert.equal(app.data.sessions.length,0);
+    assert.equal(app.opened,undefined); assert.match(app.message,/under 2 minutes discarded/);
+  }
+});
+
+test('a short final block never discards a qualifying earlier subject', () => {
+  for (const confirm of ['always','auto']) {
+    const data=fixture(), {app}=harness({[C.KEY]:JSON.stringify(data)}); app.load(); app.data.settings.confirm=confirm;
+    app.renderReview=()=>{};
+    app.draft.elapsed=120000; app.draft.blockElapsed=120000; C.closeBlock(app.draft);
+    app.draft.activeSubjectId=data.subjects[1].id; app.draft.elapsed+=45000; app.draft.blockElapsed=45000;
+    app.endSession();
+    if (confirm==='always') { assert.equal(app.opened,'reviewModal'); app.saveSession(false); }
+    assert.equal(app.data.entries.length,1); assert.equal(app.data.entries[0].subjectId,data.subjects[0].id);
+    assert.equal(C.totals(app.data).total,120000); assert.equal(app.draft.elapsed,0);
+  }
+});
+
+test('switching subjects while paused discards only the short old block and persists the new subject', () => {
+  const data=fixture(), {app,values}=harness({[C.KEY]:JSON.stringify(data)}); app.load();
+  app.draft.elapsed=45000; app.draft.blockElapsed=45000;
+  app.chooseSubject(data.subjects[1].id);
+  assert.equal(app.draft.running,false); assert.equal(app.draft.elapsed,0); assert.equal(app.draft.blocks.length,0);
+  assert.equal(app.draft.activeSubjectId,data.subjects[1].id);
+  const reload=harness(Object.fromEntries(values)); reload.app.load();
+  assert.equal(reload.app.draft.activeSubjectId,data.subjects[1].id); assert.equal(reload.app.draft.elapsed,0);
+});
+
+test('review adjustments below the minimum are filtered after validation', () => {
+  const data=fixture(), {app,node}=harness({[C.KEY]:JSON.stringify(data)}); app.load();
+  app.reviewBlocks=[{date,subjectId:data.subjects[0].id,duration:120000},{date,subjectId:data.subjects[1].id,duration:120000}];
+  app.reviewBlocks.forEach((b,i)=>{node('subject'+i).value=b.subjectId; node('date'+i).value=date; node('duration'+i).value=i ? '2m' : '119.999s';});
+  app.saveSession(); assert.equal(app.data.entries.length,1); assert.equal(app.data.entries[0].subjectId,data.subjects[1].id); assert.equal(C.totals(app.data).total,120000);
+  assert.match(app.message,/under 2 minutes discarded/);
+});
+
 test('moving a timed entry preserves its observed range and displays its original dates', () => {
   const data = fixture();
-  C.commitSession(data,'timed',[{date,subjectId:data.subjects[0].id,duration:60000,startedAt:'2026-10-06T10:00:00.000Z',endedAt:'2026-10-06T10:01:00.000Z'}]);
+  C.commitSession(data,'timed',[{date,subjectId:data.subjects[0].id,duration:120000,startedAt:'2026-10-06T10:00:00.000Z',endedAt:'2026-10-06T10:02:00.000Z'}]);
   const {app,node} = harness({[C.KEY]:JSON.stringify(data)}); app.load(); app.entryId = data.entries[0].id;
   node('entryDuration').value = '1m'; node('entrySubject').value = data.subjects[0].id; node('entryDate').value = '2026-10-07';
   app.saveEntry({preventDefault(){}});
-  assert.equal(app.data.entries[0].startedAt,'2026-10-06T10:00:00.000Z'); assert.equal(app.data.entries[0].endedAt,'2026-10-06T10:01:00.000Z');
+  assert.equal(app.data.entries[0].startedAt,'2026-10-06T10:00:00.000Z'); assert.equal(app.data.entries[0].endedAt,'2026-10-06T10:02:00.000Z');
   assert.match(app.timeRange(app.data.entries[0]),/06\/10/);
   assert.equal(app.data.entries[0].duration,60000); assert.equal(app.data.entries[0].sessionId,'timed');
 });
@@ -88,10 +146,10 @@ test('failed discard preserves the recoverable draft and does not report success
 });
 test('save commits once even when clearing its persisted draft fails', () => {
   const data = fixture(), {app,storage,values} = harness({[C.KEY]:JSON.stringify(data)}); app.load();
-  app.draft.elapsed=60000; app.draft.blockElapsed=60000; C.closeBlock(app.draft); app.persistDraft();
+  app.draft.elapsed=120000; app.draft.blockElapsed=120000; C.closeBlock(app.draft); app.persistDraft();
   app.reviewBlocks=C.clone(app.draft.blocks); storage.fail = C.DRAFT_KEY; app.saveSession(false);
-  assert.equal(C.totals(app.data).total,60000); assert.equal(app.data.sessions.length,1);
-  const reload = harness(Object.fromEntries(values)); reload.app.load(); assert.equal(C.draftTimes(reload.app.draft).total,0); assert.equal(C.totals(reload.app.data).total,60000);
+  assert.equal(C.totals(app.data).total,120000); assert.equal(app.data.sessions.length,1);
+  const reload = harness(Object.fromEntries(values)); reload.app.load(); assert.equal(C.draftTimes(reload.app.draft).total,0); assert.equal(C.totals(reload.app.data).total,120000);
 });
 test('session review validates adjusted inputs and preserves per-block subjects', () => {
   const data = fixture(), {app,node} = harness({[C.KEY]:JSON.stringify(data)}); app.load();
@@ -102,7 +160,8 @@ test('session review validates adjusted inputs and preserves per-block subjects'
 });
 test('restore persists replacement and draft atomically; reload keeps the restored draft paused', () => {
   const old = fixture(), restored = fixture(), {app,storage,values} = harness({[C.KEY]:JSON.stringify(old)}); app.load();
-  C.commitSession(restored,'restored-session',[{date,duration:60000,subjectId:restored.subjects[0].id}]);
+  C.commitSession(restored,'restored-session',[{date,duration:120000,subjectId:restored.subjects[0].id}]);
+  restored.entries[0].duration=60000; // Historical short records remain valid on restore.
   const draft=C.newDraft(restored.subjects[1].id); draft.elapsed=30000; draft.blockElapsed=30000; draft.needsReview=true;
   app.pendingRestore={data:restored,draft}; storage.fail=C.DRAFT_KEY; app.confirmRestore();
   assert.equal(C.totals(app.data).total,60000); assert.equal(app.draft.elapsed,30000); assert.equal(app.draft.running,false);

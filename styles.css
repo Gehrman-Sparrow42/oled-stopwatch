@@ -13,6 +13,7 @@ input, select, textarea { border: 1px solid #393939; border-radius: 5px; backgro
 textarea { resize: vertical; width: 100%; line-height: 1.6; } input::placeholder, textarea::placeholder { color: #878787; } label { color: var(--muted); }
 h1,h2,h3,p { margin: 0; } h1 { font-size: .9rem; letter-spacing: .16em; font-weight: 650; } h1 span { color: var(--muted); } h2 { font-size: 1.05rem; font-weight: 600; } h3 { font-size: .9rem; font-weight: 600; }
 .muted { color: var(--muted); font-size: .85rem; }
+.block-minimum { margin-top: .4rem; font-size: .75rem; }
 .app-container { width: min(100%, 860px); margin: auto; padding: 1.75rem 1.5rem 2rem; }
 .app-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding-bottom: 1.5rem; }
 .header-actions { display: flex; flex-wrap: wrap; gap: .4rem; } .header-actions button { border-color: transparent; font-size: .8rem; color: var(--muted); }

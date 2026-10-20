@@ -16,6 +16,8 @@ The server binds to `http://127.0.0.1:8110`. You can also open `index.html` dire
 
 Start study, pause during breaks, and choose Next block when you finish a topic. Changing the subject closes the previous block under its original subject. All blocks remain in a recoverable draft until you finish the session.
 
+Timer blocks shorter than **2 minutes** are discarded automatically when you change subjects, choose Next block, or end the session. Exactly 2 minutes is kept. Discarded time is removed from the draft total and never carried into the next subject. Pausing and resuming continues the same block; breaks do not count toward the minimum. Each block must qualify independently, even if multiple blocks would be grouped under the same subject in the notebook. The minimum is also checked after session-review adjustments and for recovered drafts before saving. If no qualifying blocks remain, the session ends without a review or saved session. Previously saved records, manual entries, diary imports, note sync, and backup restores retain their durations, including older short records.
+
 End session opens a review with editable subjects, dates, and durations. Save commits the session exactly once to the notebook and session archive. Discard removes the unfinished session without changing recorded diary totals. Whole-session duration adjustment preserves the proportions of the reviewed blocks. Each block defaults to its local completion date; sessions are not automatically split at midnight.
 
 Preferences can enable immediate saving, but recovered drafts and timing anomalies always require review. The warning threshold measures session duration, not detected user inactivity.
@@ -33,6 +35,8 @@ Deleting an entry, a day's time, or one session offers ten seconds of Undo. Anot
 ## Notes, imports, and exports
 
 Repeated entries for the same subject on one day appear as one combined row with their summed duration. Expand that row to edit or delete individual entries; grouping does not merge or rewrite stored records or session links. Daily totals use an accent badge to distinguish them from entry durations.
+
+When time ranges are shown, combined rows summarize missing timestamps once (for example, “2 entries without recorded times”). Sessions whose entries have all been deleted are hidden from the archive display; their saved IDs remain in storage to prevent an old recovered draft from being credited again.
 
 New timer blocks record their observed start and end timestamps. The notebook's **Show time ranges** switch (also in Preferences) is off by default and remembers your choice. Turning it on shows each recorded range in local time, including on combined rows. A range spans the first start through the last pause or finish; breaks inside that span remain excluded from credited study time. Midnight-crossing ranges include dates. Existing entries, manual additions, imports, and older drafts without reliable timing show “Time range not recorded”; times are never inferred from duration or session-save timestamps. Changing the assigned study date or duration retains the observed range; dates appear in the range whenever they differ from the assigned day. Timestamps survive draft recovery and JSON backup/restore.
 
