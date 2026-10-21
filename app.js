@@ -303,6 +303,9 @@
       $('weekTotal').textContent = pretty(weekTotal); $('weekAverage').textContent = average.average === null ? '—' : pretty(average.average);
       $('weekAverage').title = average.days ? `Average over ${average.days} ${average.days === 1 ? 'day' : 'days'}, through today` : 'This week has not started yet';
       const top = [...bySubject].sort((a,b) => b[1]-a[1])[0]; $('weekTop').textContent = top ? this.subjectName(top[0]) : '—';
+      const best = C.bestDay(this.data,this.week);
+      $('weekBest').textContent = best ? new Date(best.date+'T12:00:00').toLocaleDateString('en',{weekday:'long'}) : '—';
+      $('weekBestTime').textContent = best ? pretty(best.total) : ''; $('weekBestTime').hidden = !best;
       if (focused) { const note = [...days.querySelectorAll('textarea')].find(n => n.dataset.noteDate === focused); if (note) { note.focus(); note.setSelectionRange(start,end); } }
     }
     renderSubjects() {

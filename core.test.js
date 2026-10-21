@@ -10,6 +10,22 @@ function storage(data) {
   return { getItem: key => values.get(key) ?? null, setItem: (key,value) => values.set(key,value) };
 }
 
+test('best day sums all subjects for the displayed week and resolves ties chronologically', () => {
+  const data=fixture(), sid=data.subjects[0].id, other=data.subjects[1].id, week=new Date(2026,9,19);
+  assert.equal(C.bestDay(data,week),null);
+  const entry=(id,date,subjectId,duration)=>({id,date,subjectId,duration,source:'manual'});
+  data.entries.push(entry('mon','2026-10-19',sid,60*minute),entry('tue1','2026-10-20',sid,90*minute),
+    entry('tue2','2026-10-20',other,60*minute),entry('wed','2026-10-21',sid,150*minute),
+    entry('outside','2026-10-26',sid,500*minute));
+  const before=JSON.stringify(data);
+  assert.deepEqual(C.bestDay(data,week),{date:'2026-10-20',total:150*minute});
+  assert.deepEqual(C.bestDay(data,new Date(2026,9,26)),{date:'2026-10-26',total:500*minute});
+  assert.equal(C.bestDay(data,new Date(2026,9,12)),null); assert.equal(JSON.stringify(data),before);
+  data.entries.push(entry('sun','2026-10-25',sid,300*minute));
+  assert.deepEqual(C.bestDay(data,week),{date:'2026-10-25',total:300*minute});
+  assert.deepEqual(C.bestDay(data,new Date(2026,9,18)),{date:'2026-10-20',total:150*minute});
+});
+
 test('daily average includes elapsed calendar days, including today and days without study', () => {
   const data=fixture(), sid=data.subjects[0].id, monday=new Date(2026,9,19);
   data.entries.push({id:'mon',date:'2026-10-19',subjectId:sid,duration:120*minute,source:'manual'},

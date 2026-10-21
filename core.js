@@ -181,6 +181,16 @@
     }
     return { total, bySubject };
   }
+  function bestDay(data, weekStart) {
+    let best = null;
+    for (let i=0;i<7;i++) {
+      const day = new Date(weekStart); day.setDate(day.getDate()+i);
+      const date = dateKey(day), total = totals(data,date).total;
+      // Keep the first day in the displayed week when totals tie.
+      if (total > 0 && (!best || total > best.total)) best = {date,total};
+    }
+    return best;
+  }
   function weekAverage(data, weekStart, today = new Date()) {
     const todayKey = dateKey(today); let days = 0, total = 0;
     for (let i=0;i<7;i++) {
@@ -363,5 +373,5 @@
   }
   return { KEY, DRAFT_KEY, MIN_BLOCK_MS, DEFAULTS, clone, id, normalize, positive, dateKey, validDate, settings, empty,
     subject, allocate, duration, studyLine, parseDate, parseImport, syncEntries, applyImport, applySync,
-    commitSession, totals, weekAverage, migrate, validate, backup, newDraft, draftTimes, checkpoint, pause, closeBlock, validateDraft, Store };
+    commitSession, totals, bestDay, weekAverage, migrate, validate, backup, newDraft, draftTimes, checkpoint, pause, closeBlock, validateDraft, Store };
 });

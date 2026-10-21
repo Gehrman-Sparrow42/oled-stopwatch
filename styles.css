@@ -27,7 +27,8 @@ details { border-top: 1px solid var(--line); } summary { cursor: pointer; paddin
 .detail-tools { display: flex; flex-wrap: wrap; gap: .5rem; margin: .65rem 0; } .detail-tools button { font-size: .8rem; }
 .table-scroll { overflow-x: auto; } table { width: 100%; border-collapse: collapse; font-size: .8rem; text-align: left; } th,td { padding: .8rem .5rem; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; } th { color: var(--muted); font-weight: 500; }
 .week-nav { display: flex; justify-content: space-between; align-items: center; gap: 1rem; text-align: center; } .week-nav button { min-width: 44px; }
-.week-summary { display: grid; grid-template-columns: 1fr 1fr 1.5fr; gap: 1rem; padding: 1.5rem 0; border-bottom: 1px solid var(--line); } .week-summary strong { display: block; font-weight: 500; margin-top: .25rem; overflow-wrap: anywhere; }
+.week-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; padding: 1.5rem 0; border-bottom: 1px solid var(--line); } .week-summary strong { display: block; font-weight: 500; margin-top: .25rem; overflow-wrap: anywhere; }
+.week-summary .summary-detail { display: block; margin-top: .15rem; font-variant-numeric: tabular-nums; }
 .notebook-tools { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1.25rem 0; } .notebook-tools button { font-size: .8rem; }
 .notebook-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; margin: 1.25rem 0; }
 .notebook-toolbar .notebook-tools { margin: 0; }
@@ -95,7 +96,7 @@ dialog { width: min(620px, calc(100% - 2rem)); max-height: calc(100dvh - 2rem); 
   .day-card { padding: 1rem; } .day-total { font-size: 1.1rem; } .day-header > div { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; } .day-header h3 { margin-right: .25rem; }
   .app-container { padding: 1rem; } .app-header { flex-wrap: wrap; padding-bottom: 1rem; } .header-actions { width: 100%; justify-content: space-between; } .header-actions button { padding: .5rem; } .tabs { margin-bottom: 1.5rem; }
   .controls { grid-template-columns: 1fr 1fr; gap: .5rem; } .controls .primary { grid-column: 1 / -1; } .digits { font-size: clamp(2rem, 10vw, 3.5rem); } .timer-hero { padding: 2rem 0; } .timer-tools { flex-wrap: wrap; }
-  .week-summary { grid-template-columns: 1fr 1fr; } .week-summary > div:last-child { grid-column: 1 / -1; } .field { flex-direction: column; align-items: stretch; gap: .35rem; } .field input, .field select { width: 100%; }
+  .week-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .field { flex-direction: column; align-items: stretch; gap: .35rem; } .field input, .field select { width: 100%; }
   .entry-row { flex-wrap: wrap; } .entry-row .row-actions { margin-left: auto; } .day-footer { flex-wrap: wrap; } .day-goal { flex-wrap: wrap; gap: .5rem; } .dialog-body { padding: 1rem; } .subject-row { flex-wrap: wrap; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
