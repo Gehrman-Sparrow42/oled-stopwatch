@@ -4,3 +4,6 @@ __pycache__/
 .vscode/
 .idea/
 *.log
+
+# Local screenshots and test snapshots.
+/artifacts/
