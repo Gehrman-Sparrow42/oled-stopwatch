@@ -3,6 +3,8 @@
   'use strict';
   const C = window.ChronoCore;
   const $ = id => document.getElementById(id);
+  function updateText(id,value) { const node = $(id); if (node.textContent !== value) node.textContent = value; }
+  function updateDisabled(id,value) { const node = $(id); if (node.disabled !== value) node.disabled = value; }
   function el(tag, text, className) {
     const node = document.createElement(tag);
     if (text !== undefined && text !== null) node.textContent = String(text);
@@ -50,6 +52,7 @@
       });
       document.addEventListener('visibilitychange', () => {
         if (!document.hidden) { this.renderTimer(); this.renderDiaryIfVisible(); }
+        this.startFrames();
         this.flushNotes(); this.persistDraft();
       });
       window.addEventListener('pagehide', () => { this.flushNotes(); this.persistDraft(); });
@@ -154,8 +157,15 @@
       this.startFrames();
     }
     startFrames() {
-      if (this.raf || !this.draft.running) return;
-      const frame = () => { this.raf = null; this.renderTimer(); if (this.draft.running) this.raf = requestAnimationFrame(frame); };
+      if (!this.draft.running || this.stale || this.tab !== 'timer' || document.hidden) {
+        if (this.raf) cancelAnimationFrame(this.raf);
+        this.raf = null; return;
+      }
+      if (this.raf) return;
+      const frame = () => {
+        this.raf = null;
+        if (this.draft.running && !this.stale && this.tab === 'timer' && !document.hidden) { this.renderTimer(); this.startFrames(); }
+      };
       this.raf = requestAnimationFrame(frame);
     }
     ensureFallback() { if (!this.fallbackTicker) this.fallbackTicker = setInterval(() => this.tick(),1000); }
@@ -196,19 +206,25 @@
     renderAll() {
       document.documentElement.dataset.theme = this.settings.theme;
       const picker = this.subjectSelect(this.draft.activeSubjectId); $('activeSubject').replaceChildren(...picker.children); $('activeSubject').value = this.draft.activeSubjectId;
-      this.renderTimer(); this.renderBlocks(); this.renderDiary(); this.renderSubjects(); this.renderHistory(); this.renderSettings();
+      this.renderTimer(); this.renderBlocks(); this.renderDiaryIfVisible();
+      if ($('settingsModal').open) { this.renderSubjects(); this.renderSettings(); }
+      if ($('historyModal').open) this.renderHistory();
     }
     renderTimer() {
       const {total,block} = C.draftTimes(this.draft), parts = timeParts(total,this.settings.precision);
-      $('primaryTime').textContent = parts[0]; $('millisTime').textContent = parts[1]; document.body.classList.toggle('running',this.draft.running);
-      $('statusPill').textContent = this.stale ? 'Paused — reload required' : this.draft.running ? 'Studying' : total ? 'Paused' : 'Ready to study';
-      $('btnStart').textContent = this.draft.running ? 'Pause study' : total ? 'Resume study' : 'Start study';
-      $('btnStart').disabled = this.stale; $('btnLap').disabled = !this.draft.running || this.stale; $('btnReset').disabled = !total || this.stale;
-      $('blockPreview').textContent = total ? `Block ${this.draft.blocks.length+1} · ${pretty(block)} · Draft, not saved yet` : 'Blocks stay in a draft until you save.';
+      if (this.tab === 'timer' && !document.hidden) {
+        updateText('primaryTime',parts[0]); updateText('millisTime',parts[1]);
+        if (document.body.classList.contains('running') !== this.draft.running) document.body.classList.toggle('running',this.draft.running);
+        updateText('statusPill',this.stale ? 'Paused — reload required' : this.draft.running ? 'Studying' : total ? 'Paused' : 'Ready to study');
+        updateText('btnStart',this.draft.running ? 'Pause study' : total ? 'Resume study' : 'Start study');
+        updateDisabled('btnStart',this.stale); updateDisabled('btnLap',!this.draft.running || this.stale); updateDisabled('btnReset',!total || this.stale);
+        updateText('blockPreview',total ? `Block ${this.draft.blocks.length+1} · ${pretty(block)} · Draft, not saved yet` : 'Blocks stay in a draft until you save.');
+      }
       const title = this.draft.running ? `${parts[0]} · ${this.subjectName(this.draft.activeSubjectId)} · CHRONO FOCUS` : 'CHRONO FOCUS'; if (document.title !== title) document.title = title;
     }
     renderBlocks() {
       const body = $('blocksBody'); body.replaceChildren(); $('blockCount').textContent = this.draft.blocks.length;
+      if (!$('blocksDetails').open) return;
       for (const [i,b] of this.draft.blocks.entries()) {
         const row = el('tr'); row.append(el('td',i+1),el('td',this.subjectName(b.subjectId)),el('td',pretty(b.duration)),el('td',this.displayDate(b.date)+(b.legacyCredited ? ' · already recorded' : ''))); body.append(row);
       }
@@ -233,6 +249,14 @@
       const sameDay = C.dateKey(start) === C.dateKey(end) && C.dateKey(start) === entry.date;
       return `${sameDay ? clock(start) : this.displayDate(C.dateKey(start))+' '+clock(start)} – ${sameDay ? clock(end) : this.displayDate(C.dateKey(end))+' '+clock(end)}`;
     }
+    bindEntryDetails(details, entries, legacyBlocks = null) {
+      let content = null;
+      const update = () => {
+        if (details.open && !content) { content = this.entriesUI(entries,legacyBlocks); details.append(content); }
+        else if (!details.open && content) { content.remove(); content = null; }
+      };
+      details.addEventListener('toggle',update); update();
+    }
     groupedEntriesUI(entries, expanded = new Set()) {
       const list = el('div',undefined,'subject-entries'), groups = new Map();
       for (const entry of entries) {
@@ -250,7 +274,7 @@
           description.append(el('small',ranges.join(' · '),'entry-time-range'));
         }
         summary.append(description,el('span',pretty(items.reduce((total,item) => total+item.duration,0)),'group-total'));
-        group.append(summary,this.entriesUI(items)); list.append(group);
+        group.append(summary); this.bindEntryDetails(group,items); list.append(group);
       }
       if (!entries.length) list.append(el('p','No saved study entries.','muted'));
       return list;
@@ -260,13 +284,14 @@
       this.diaryDate = C.dateKey();
       $('goalsToggle').setAttribute('aria-checked',String(this.settings.showGoals));
       $('timeRangesToggle').setAttribute('aria-checked',String(this.settings.showTimeRanges));
-      const expanded = new Set([...$('daysList').querySelectorAll('details[open]')].map(n => n.dataset.detail));
+      const expanded = $('daysList').children.length ? new Set([...$('daysList').querySelectorAll('details[open]')].map(n => n.dataset.detail)) : this.diaryExpanded || new Set();
       const focused = document.activeElement?.dataset.noteDate;
       const start = focused ? document.activeElement.selectionStart : null, end = focused ? document.activeElement.selectionEnd : null;
-      const days = $('daysList'); days.replaceChildren(); let weekTotal = 0; const bySubject = new Map(); let lastKey;
+      const days = $('daysList'), summary = C.weekSummary(this.data,this.week), bySubject = summary.bySubject;
+      days.replaceChildren(); let lastKey;
       for (let i=0;i<7;i++) {
         const date = new Date(this.week); date.setDate(date.getDate()+i); const key = C.dateKey(date); lastKey = key;
-        const {total,bySubject: subjects} = C.totals(this.data,key); weekTotal += total;
+        const {total,bySubject: subjects,entries} = summary.days[i];
         const card = el('article',undefined,'day-card'); card.dataset.date = key;
         const header = el('div',undefined,'day-header'), name = el('div');
         name.append(el('h3',date.toLocaleDateString('en',{weekday:'long'})),el('span',this.displayDate(key),'muted'));
@@ -281,9 +306,8 @@
         for (const [sid,ms] of subjects) {
           const badge = el('span',`${this.subjectName(sid)} ${pretty(ms)} `), remove = button('×','clear-subject',sid);
           remove.dataset.date = key; remove.setAttribute('aria-label',`Remove ${this.subjectName(sid)} time from ${key}`);
-          badge.append(remove); badges.append(badge); bySubject.set(sid,(bySubject.get(sid)||0)+ms);
+          badge.append(remove); badges.append(badge);
         } card.append(badges);
-        const entries = this.data.entries.filter(e => e.date === key);
         const entrySection = el('section',undefined,'day-entries'), entryHeader = el('div',undefined,'entries-header');
         entryHeader.append(el('h4',`Entries · ${entries.length}`),button('+ Add time','add-entry',key,'add-time'));
         entrySection.append(entryHeader,this.groupedEntriesUI(entries,expanded)); card.append(entrySection);
@@ -299,11 +323,11 @@
         actions.append(el('summary','Day actions'),tools); footer.append(actions); card.append(footer); days.append(card);
       }
       $('weekTitle').textContent = `${this.displayDate(C.dateKey(this.week))} – ${this.displayDate(lastKey)} · ${this.week.getFullYear()}`;
-      const average = C.weekAverage(this.data,this.week);
-      $('weekTotal').textContent = pretty(weekTotal); $('weekAverage').textContent = average.average === null ? '—' : pretty(average.average);
+      const average = summary.average;
+      $('weekTotal').textContent = pretty(summary.total); $('weekAverage').textContent = average.average === null ? '—' : pretty(average.average);
       $('weekAverage').title = average.days ? `Average over ${average.days} ${average.days === 1 ? 'day' : 'days'}, through today` : 'This week has not started yet';
       const top = [...bySubject].sort((a,b) => b[1]-a[1])[0]; $('weekTop').textContent = top ? this.subjectName(top[0]) : '—';
-      const best = C.bestDay(this.data,this.week);
+      const best = summary.best;
       $('weekBest').textContent = best ? new Date(best.date+'T12:00:00').toLocaleDateString('en',{weekday:'long'}) : '—';
       $('weekBestTime').textContent = best ? pretty(best.total) : ''; $('weekBestTime').hidden = !best;
       if (focused) { const note = [...days.querySelectorAll('textarea')].find(n => n.dataset.noteDate === focused); if (note) { note.focus(); note.setSelectionRange(start,end); } }
@@ -320,9 +344,14 @@
     }
     renderHistory() {
       const list = $('historyList'); list.replaceChildren();
+      const bySession = new Map();
+      for (const entry of this.data.entries) if (entry.sessionId) {
+        if (!bySession.has(entry.sessionId)) bySession.set(entry.sessionId,[]);
+        bySession.get(entry.sessionId).push(entry);
+      }
       let visible = 0;
       for (const session of this.data.sessions) {
-        const entries = this.data.entries.filter(e => e.sessionId === session.id);
+        const entries = bySession.get(session.id) || [];
         // Keep saved IDs in storage to prevent replaying an old recovered draft.
         if (!session.legacy && !entries.length) continue;
         visible++;
@@ -330,7 +359,8 @@
         const first = entries[0]?.subjectId || session.subjectId || this.draft.activeSubjectId;
         const item = el('article',undefined,'history-item'); item.append(el('h3',session.legacy ? `Historical session · ${session.label || 'Unknown date'}` : new Date(session.createdAt).toLocaleString()),el('p',`${pretty(total)} · ${entries.length || session.blocks?.length || 0} blocks`));
         if (session.legacy) item.append(el('p','Historical archive only. Its time is already represented by migrated diary totals.','muted'));
-        const details = el('details'); details.append(el('summary','View / edit entries'),this.entriesUI(entries,session.legacy ? session.blocks : null)); item.append(details);
+        const details = el('details'); details.append(el('summary','View / edit entries'));
+        this.bindEntryDetails(details,entries,session.legacy ? session.blocks : null); item.append(details);
         const tools = el('div',undefined,'detail-tools'); tools.append(button('Start new session','new-session',first),button('Delete session','delete-session',session.id,'danger')); item.append(tools); list.append(item);
       }
       if (!visible) list.append(el('p','Saved sessions will appear here.','muted')); $('clearHistory').disabled = !visible;
@@ -524,6 +554,7 @@
       } catch (error) { $('restoreError').textContent = `Restore did not complete: ${error.message}`; }
     }
     updateUndo() {
+      if (this.store.undo && Date.now() > this.store.undo.until) this.store.undo = null;
       const available = this.store.undo && Date.now() <= this.store.undo.until && !this.dirtyNotes.size && !this.stale;
       $('undoBar').hidden = !available; if (available) { $('undoLabel').textContent = this.store.undo.label; $('toast').hidden = true; }
     }
@@ -532,18 +563,34 @@
       if (!this.flushNotes()) return; if (tab === 'diary' && this.focusMode) this.toggleFocus(); this.tab = tab;
       for (const name of ['timer','diary']) { const selected = name === tab, title = name[0].toUpperCase()+name.slice(1); $('view'+title).hidden = !selected; $('tab'+title).setAttribute('aria-selected',String(selected)); $('tab'+title).tabIndex = selected ? 0 : -1; }
       if (tab === 'diary') this.renderDiary();
+      else {
+        this.diaryExpanded = new Set([...$('daysList').querySelectorAll('details[open]')].map(n => n.dataset.detail));
+        $('daysList').replaceChildren(); this.renderTimer();
+      }
+      this.startFrames();
     }
     toggleFocus() {
       if (!this.focusMode && this.tab !== 'timer') this.switchTab('timer'); this.focusMode = !this.focusMode; document.body.classList.toggle('focus-view',this.focusMode);
       $('focusToggle').textContent = this.focusMode ? 'Exit focus view' : 'Focus view'; $('focusToggle').setAttribute('aria-pressed',String(this.focusMode));
     }
-    open(id) { if (!this.flushNotes()) return; const dialog = $(id); if (!dialog.open) { dialog.returnFocus = document.activeElement; dialog.showModal(); } }
+    open(id) {
+      if (!this.flushNotes()) return;
+      const dialog = $(id);
+      if (!dialog.open) {
+        if (id === 'settingsModal') { this.renderSubjects(); this.renderSettings(); }
+        if (id === 'historyModal') this.renderHistory();
+        dialog.returnFocus = document.activeElement; dialog.showModal();
+      }
+    }
     close(id) {
-      const dialog = $(id); if (!dialog.open) return; dialog.close();
-      if (dialog.returnFocus?.isConnected) dialog.returnFocus.focus();
+      const dialog = $(id); if (!dialog.open) return;
+      const returnFocus = dialog.returnFocus; dialog.returnFocus = null; dialog.close();
+      if (id === 'historyModal') $('historyList').replaceChildren();
+      if (id === 'settingsModal') $('settingsSubjects').replaceChildren();
+      if (returnFocus?.isConnected) returnFocus.focus();
       else {
         const parent = [...document.querySelectorAll('dialog[open]')].pop();
-        const trigger = dialog.returnFocus?.dataset;
+        const trigger = returnFocus?.dataset;
         const replacement = trigger?.action ? [...document.querySelectorAll('button[data-action]')].find(node => node.dataset.action === trigger.action && node.dataset.value === trigger.value) : null;
         (parent?.querySelector('button') || replacement || $(this.tab === 'timer' ? 'tabTimer' : 'tabDiary')).focus();
       }
@@ -589,7 +636,8 @@
       on('btnStart',() => this.toggleTimer()); on('btnLap',() => this.nextBlock()); on('btnReset',() => this.endSession()); on('activeSubject',event => this.chooseSubject(event.target.value),'change');
       on('quickAddSubject',() => { this.open('settingsModal'); $('subjectName').focus(); }); on('focusToggle',() => this.toggleFocus());
       on('quickRenameSubject',() => this.editSubject(this.draft.activeSubjectId));
-      on('settingsToggle',() => { this.renderSettings(); this.open('settingsModal'); }); on('historyToggle',() => { this.renderHistory(); this.open('historyModal'); });
+      on('settingsToggle',() => this.open('settingsModal')); on('historyToggle',() => this.open('historyModal'));
+      on('blocksDetails',() => this.renderBlocks(),'toggle');
       on('tabTimer',() => this.switchTab('timer')); on('tabDiary',() => this.switchTab('diary'));
       on('goalsToggle',() => this.mutate(data => { data.settings.showGoals = !data.settings.showGoals; },null));
       on('timeRangesToggle',() => this.mutate(data => { data.settings.showTimeRanges = !data.settings.showTimeRanges; },null));

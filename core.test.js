@@ -10,6 +10,26 @@ function storage(data) {
   return { getItem: key => values.get(key) ?? null, setItem: (key,value) => values.set(key,value) };
 }
 
+test('weekly summary scans history once and reuses the same totals for entries and metrics', () => {
+  const data=fixture(), sid=data.subjects[0].id;
+  const entries=Array.from({length:10000},(_,i)=>({date:i%2 ? '2026-10-20' : '2026-10-19',subjectId:sid,duration:60000}));
+  let reads=0;
+  const input={entries:{*[Symbol.iterator](){for(const entry of entries){reads++; yield entry;}}}};
+  const summary=C.weekSummary(input,new Date(2026,9,19),new Date(2026,9,20));
+  assert.equal(reads,10000); assert.equal(summary.total,10000*60000);
+  assert.equal(summary.days[0].entries.length,5000); assert.equal(summary.days[1].entries.length,5000);
+  assert.equal(summary.bySubject.get(sid),summary.total); assert.equal(summary.average.average,summary.total/2);
+  assert.deepEqual(summary.best,{date:'2026-10-19',total:5000*60000});
+  assert.equal(summary.days[0].entries[0],entries[0]);
+});
+
+test('weekly summary preserves chronological subject order when top-subject totals tie', () => {
+  const data=fixture(), [math,coding]=data.subjects;
+  data.entries=[{date:'2026-10-20',subjectId:coding.id,duration:120000},{date:'2026-10-19',subjectId:math.id,duration:120000}];
+  const summary=C.weekSummary(data,new Date(2026,9,19));
+  assert.deepEqual([...summary.bySubject.keys()],[math.id,coding.id]);
+});
+
 test('best day sums all subjects for the displayed week and resolves ties chronologically', () => {
   const data=fixture(), sid=data.subjects[0].id, other=data.subjects[1].id, week=new Date(2026,9,19);
   assert.equal(C.bestDay(data,week),null);

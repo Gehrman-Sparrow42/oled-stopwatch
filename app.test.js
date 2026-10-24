@@ -5,27 +5,111 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const C = require('./core');
 function harness(seed = {}) {
-  const values = new Map(Object.entries(seed)); const nodes = new Map();
+  const values = new Map(Object.entries(seed)); const nodes = new Map(), frames = new Map(); let frameId = 0;
   const node = name => {
-    if (!nodes.has(name)) nodes.set(name,{value:'',textContent:'',hidden:true,open:false,disabled:false,children:[],replaceChildren(...children){this.children=children;},append(...children){this.children.push(...children);},focus(){}});
+    if (!nodes.has(name)) nodes.set(name,{value:'',textContent:'',hidden:true,open:false,disabled:false,children:[],replaceChildren(...children){this.children=children;},append(...children){this.children.push(...children);},querySelectorAll(){return [];},setAttribute(name,value){this[name]=value;},focus(){}});
     return nodes.get(name);
   };
   const storage = { getItem:key => values.get(key) ?? null, setItem(key,value) {
     if (storage.fail === key || storage.fail === '*') throw new Error('Quota exceeded'); values.set(key,value);
   } };
+  const classes = new Set();
   const context = { ChronoCore:C, localStorage:storage, Date, JSON, Map, Set, performance, setTimeout, clearTimeout,
-    document:{readyState:'loading',addEventListener(){},getElementById:node,querySelectorAll:() => [],
-      createElement(tag) { return {tag,dataset:{},children:[],textContent:'',append(...children){this.children.push(...children);}}; },
+    requestAnimationFrame(callback){const id=++frameId; frames.set(id,callback); return id;},cancelAnimationFrame(id){frames.delete(id);},
+    document:{readyState:'loading',hidden:false,title:'',documentElement:{dataset:{}},body:{classList:{contains:name=>classes.has(name),toggle(name,enabled){if(enabled) classes.add(name); else classes.delete(name);}}},addEventListener(){},getElementById:node,querySelectorAll:() => [],
+      createElement(tag) { return {tag,dataset:{},children:[],listeners:{},textContent:'',append(...children){this.children.push(...children);},addEventListener(event,callback){this.listeners[event]=callback;}}; },
       querySelector(selector) { const match = selector.match(/data-review-(subject|date|duration)="(\d+)"/); return match ? node(match[1]+match[2]) : null; }} };
   context.window = context;
   vm.runInNewContext(fs.readFileSync(require.resolve('./app.js'),'utf8'),context);
   const app = Object.create(context.ChronoStopwatch.prototype);
   Object.assign(app,{storage,stale:false,noteTimers:new Map(),dirtyNotes:new Map(),tab:'timer',renderAll(){},renderTimer(){},renderBlocks(){},
     warn(message){this.warning=message;},toast(message){this.message=message;},open(name){this.opened=name;},close(name){this.closed=name;}});
-  return {app,storage,values,node};
+  return {app,storage,values,node,context,frames};
 }
 const fixture = () => C.migrate({customSubjects:['Math','Coding']});
 const date = '2026-10-06';
+
+test('animation is single-instance and stops for hidden tabs, the notebook, pause and stale state', () => {
+  const data=fixture(), {app,context,frames}=harness({[C.KEY]:JSON.stringify(data)}); app.load();
+  app.draft.running=true; let renders=0; app.renderTimer=()=>{renders++;};
+  app.startFrames(); app.startFrames(); assert.equal(frames.size,1);
+  const [id,callback]=frames.entries().next().value; frames.delete(id); callback();
+  assert.equal(renders,1); assert.equal(frames.size,1);
+  app.tab='diary'; app.startFrames(); assert.equal(frames.size,0); assert.equal(app.raf,null);
+  app.tab='timer'; app.startFrames(); assert.equal(frames.size,1);
+  context.document.hidden=true; app.startFrames(); assert.equal(frames.size,0);
+  context.document.hidden=false; app.startFrames(); assert.equal(frames.size,1);
+  app.draft.running=false; app.startFrames(); assert.equal(frames.size,0);
+  app.draft.running=true; app.stale=true; app.startFrames(); assert.equal(frames.size,0);
+});
+
+test('unchanged timer renders produce no repeated text writes and hidden timers produce none', () => {
+  const data=fixture(), {app,node,context}=harness({[C.KEY]:JSON.stringify(data)}); app.load();
+  const render=()=>context.ChronoStopwatch.prototype.renderTimer.call(app);
+  let writes=0;
+  for (const id of ['primaryTime','millisTime','statusPill','btnStart','blockPreview']) {
+    let value=''; Object.defineProperty(node(id),'textContent',{get:()=>value,set(next){writes++; value=next;}});
+  }
+  render(); assert.equal(writes,5); writes=0;
+  for(let i=0;i<1000;i++) render(); assert.equal(writes,0);
+  app.tab='diary'; app.draft.elapsed=5000; app.draft.blockElapsed=5000; render(); assert.equal(writes,0);
+  app.tab='timer'; context.document.hidden=true; render(); assert.equal(writes,0);
+  context.document.hidden=false; render(); assert.ok(writes>0);
+});
+
+test('ordinary refreshes do not build closed dialogs or the hidden notebook', () => {
+  const data=fixture(), {app,node,context}=harness({[C.KEY]:JSON.stringify(data)}); app.load();
+  let history=0, settings=0, subjects=0, diary=0;
+  app.renderHistory=()=>history++; app.renderSettings=()=>settings++; app.renderSubjects=()=>subjects++; app.renderDiary=()=>diary++;
+  context.ChronoStopwatch.prototype.renderAll.call(app);
+  assert.deepEqual([history,settings,subjects,diary],[0,0,0,0]);
+  node('historyModal').open=true; node('settingsModal').open=true; app.tab='diary';
+  context.ChronoStopwatch.prototype.renderAll.call(app);
+  assert.deepEqual([history,settings,subjects,diary],[1,1,1,1]);
+});
+
+test('session entry rows are created only on expansion and released on collapse', () => {
+  const data=fixture(); C.commitSession(data,'saved',[{date,subjectId:data.subjects[0].id,duration:120000}]);
+  const {app,node}=harness({[C.KEY]:JSON.stringify(data)}); app.load(); let builds=0, releases=0;
+  app.entriesUI=entries=>{assert.equal(entries.length,1); builds++; return {remove(){releases++;}};};
+  app.renderHistory(); assert.equal(builds,0);
+  const details=node('historyList').children[0].children.find(child=>child.tag==='details');
+  details.open=true; details.listeners.toggle(); details.listeners.toggle(); assert.equal(builds,1);
+  details.open=false; details.listeners.toggle(); assert.equal(releases,1);
+  details.open=true; details.listeners.toggle(); assert.equal(builds,2);
+});
+
+test('closing Sessions releases its DOM and focus reference without changing saved data', () => {
+  const data=fixture(), {app,node,context}=harness({[C.KEY]:JSON.stringify(data)}); app.load();
+  const before=JSON.stringify(app.data), dialog=node('historyModal'); let focused=0;
+  dialog.open=true; dialog.close=()=>{dialog.open=false;}; dialog.returnFocus={isConnected:true,focus(){focused++;}};
+  node('historyList').append({textContent:'Old session DOM'});
+  context.ChronoStopwatch.prototype.close.call(app,'historyModal');
+  assert.equal(dialog.returnFocus,null); assert.equal(node('historyList').children.length,0); assert.equal(focused,1);
+  assert.equal(JSON.stringify(app.data),before);
+});
+
+test('expired Undo snapshots are released by the regular maintenance tick', () => {
+  const data=fixture(), {app}=harness({[C.KEY]:JSON.stringify(data)}); app.load();
+  app.store.undo={data:C.clone(data),label:'Old delete',until:Date.now()-1}; app.updateUndo();
+  assert.equal(app.store.undo,null); assert.deepEqual(app.data,data);
+});
+
+test('leaving the notebook saves pending notes, releases its DOM and resumes timer animation', () => {
+  const data=fixture(), {app,node,frames}=harness({[C.KEY]:JSON.stringify(data)}); app.load();
+  app.draft.running=true; app.draft.startedAt=Date.now(); app.startFrames(); assert.equal(frames.size,1);
+  app.renderDiary=()=>{}; app.switchTab('diary'); assert.equal(frames.size,0);
+  app.dirtyNotes.set(date,'Keep these pending notes'); node('daysList').append({textContent:'Old diary DOM'});
+  app.switchTab('timer'); assert.equal(app.data.notes[date],'Keep these pending notes');
+  assert.equal(node('daysList').children.length,0); assert.equal(frames.size,1); assert.equal(app.draft.running,true);
+});
+
+test('failed note saves prevent leaving and clearing the notebook', () => {
+  const data=fixture(), {app,node,storage}=harness({[C.KEY]:JSON.stringify(data)}); app.load();
+  app.tab='diary'; app.dirtyNotes.set(date,'Unsaved'); node('daysList').append({textContent:'Keep editor'}); storage.fail=C.KEY;
+  app.switchTab('timer'); assert.equal(app.tab,'diary'); assert.equal(node('daysList').children.length,1);
+  assert.equal(app.dirtyNotes.get(date),'Unsaved');
+});
 
 test('renaming the selected subject preserves saved progress and an active draft', () => {
   const data=fixture(); C.commitSession(data,'saved',[{date,subjectId:data.subjects[0].id,duration:120000}]); data.notes[date]='Original notes';
@@ -61,12 +145,14 @@ test('notebook combines repeated subjects while retaining every original edit ta
   assert.equal(list.children.length,2);
   const group = list.children[0]; assert.equal(group.tag,'details'); assert.equal(group.open,false);
   assert.equal(group.children[0].children[1].textContent,'34m');
+  assert.equal(group.children.length,1); group.open=true; group.listeners.toggle();
   const buttons = group.children[1].children.flatMap(row => row.children[1].children);
   assert.deepEqual(Array.from(buttons,button => button.dataset.value),['a','a','c','c']);
   assert.equal(app.groupedEntriesUI(entries,new Set([group.dataset.detail])).children[0].open,true);
   const single=list.children[1]; assert.equal(single.tag,'details'); assert.equal(single.className,group.className); assert.equal(single.open,false);
   assert.equal(single.children[0].children[0].children[1].textContent,'1 entry · View details');
   assert.equal(single.children[0].children[1].textContent,'1m');
+  assert.equal(single.children.length,1); single.open=true; single.listeners.toggle();
   assert.deepEqual(Array.from(single.children[1].children[0].children[1].children,button => button.dataset.value),['b','b']);
   assert.equal(JSON.stringify(entries),before);
   assert.equal(app.groupedEntriesUI([]).children[0].textContent,'No saved study entries.');
@@ -88,6 +174,7 @@ test('combined timing summaries state the missing count once and retain individu
   const entries=[{...base,id:'a'},{...base,id:'b'},{...base,id:'c',startedAt:'2026-10-06T10:00:00.000Z',endedAt:'2026-10-06T10:02:00.000Z'}];
   const group=app.groupedEntriesUI(entries).children[0], label=group.children[0].children[0].children[2].textContent;
   assert.match(label,/2 entries without recorded times/); assert.doesNotMatch(label,/Time range not recorded/);
+  group.open=true; group.listeners.toggle();
   assert.equal(group.children[1].children[0].children[0].children[2].textContent,'Time range not recorded');
 });
 

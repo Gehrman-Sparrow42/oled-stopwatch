@@ -85,6 +85,10 @@ Timer shortcuts are suppressed inside dialogs and editable fields. Tab selects c
 
 ## Validation
 
+The running timer animates only while its panel and browser tab are visible; its low-frequency timestamp checkpoints and reminders continue independently. Unchanged timer labels and controls are not rewritten. The notebook is built on demand and released when leaving it after notes save successfully, preserving expanded-panel state for the return visit. Weekly rows and metrics share one pass over the entry history. Sessions and Preferences are built only when opened; entry details inside subject groups and sessions are built on expansion and released on collapse. Closed dialogs release their content and focus references, and expired Undo snapshots are released. These optimizations do not change storage keys, record formats, elapsed-time accounting, or recovery behavior.
+
+Synthetic operation-count checks against commit `f93c961` reduced 1,000 unchanged timer renders from 5,000 text assignments to zero, and a 10,000-record weekly render from 270,000 entry reads to 10,000. These counts demonstrate reduced work, not a measured reduction in total browser RAM.
+
 ```powershell
 node --test core.test.js app.test.js
 node --check core.js

@@ -181,28 +181,29 @@
     }
     return { total, bySubject };
   }
-  function bestDay(data, weekStart) {
-    let best = null;
+  function weekSummary(data, weekStart, today = new Date()) {
+    const days = [], byDate = new Map(), bySubject = new Map(), todayKey = dateKey(today);
     for (let i=0;i<7;i++) {
       const day = new Date(weekStart); day.setDate(day.getDate()+i);
-      const date = dateKey(day), total = totals(data,date).total;
-      // Keep the first day in the displayed week when totals tie.
-      if (total > 0 && (!best || total > best.total)) best = {date,total};
+      const item = {date:dateKey(day),total:0,bySubject:new Map(),entries:[]};
+      days.push(item); byDate.set(item.date,item);
     }
-    return best;
-  }
-  function weekAverage(data, weekStart, today = new Date()) {
-    const todayKey = dateKey(today); let days = 0, total = 0;
-    for (let i=0;i<7;i++) {
-      // Advance calendar dates rather than adding 24h, so DST cannot change
-      // the number of days included in the average.
-      const day = new Date(weekStart); day.setDate(day.getDate()+i);
-      const key = dateKey(day);
-      if (key > todayKey) break;
-      days++; total += totals(data,key).total;
+    let total = 0, best = null, elapsedDays = 0, elapsedTotal = 0;
+    // One history pass feeds the diary rows and every weekly metric.
+    for (const entry of data.entries) {
+      const day = byDate.get(entry.date); if (!day) continue;
+      day.entries.push(entry); day.total += entry.duration; total += entry.duration;
+      day.bySubject.set(entry.subjectId,(day.bySubject.get(entry.subjectId)||0)+entry.duration);
     }
-    return {days,total,average:days ? total/days : null};
+    for (const day of days) {
+      for (const [subjectId,duration] of day.bySubject) bySubject.set(subjectId,(bySubject.get(subjectId)||0)+duration);
+      if (day.total > 0 && (!best || day.total > best.total)) best = {date:day.date,total:day.total};
+      if (day.date <= todayKey) { elapsedDays++; elapsedTotal += day.total; }
+    }
+    return {days,total,bySubject,best,average:{days:elapsedDays,total:elapsedTotal,average:elapsedDays ? elapsedTotal/elapsedDays : null}};
   }
+  function bestDay(data, weekStart) { return weekSummary(data,weekStart).best; }
+  function weekAverage(data, weekStart, today = new Date()) { return weekSummary(data,weekStart,today).average; }
   function migrate(legacy = {}) {
     const data = empty(); data.settings = settings(legacy.settings || { goal: legacy.dailyGoalHours,
       weekStart: legacy.weekStart, dateFormat: legacy.dateFormat });
@@ -373,5 +374,5 @@
   }
   return { KEY, DRAFT_KEY, MIN_BLOCK_MS, DEFAULTS, clone, id, normalize, positive, dateKey, validDate, settings, empty,
     subject, allocate, duration, studyLine, parseDate, parseImport, syncEntries, applyImport, applySync,
-    commitSession, totals, bestDay, weekAverage, migrate, validate, backup, newDraft, draftTimes, checkpoint, pause, closeBlock, validateDraft, Store };
+    commitSession, totals, weekSummary, bestDay, weekAverage, migrate, validate, backup, newDraft, draftTimes, checkpoint, pause, closeBlock, validateDraft, Store };
 });
