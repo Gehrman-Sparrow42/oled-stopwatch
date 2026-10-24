@@ -105,6 +105,36 @@ test('timer ranges capture start and end across pauses, survive reload and backu
   }
 });
 
+test('overnight blocks are credited to their local start date through checkpoints and reloads', () => {
+  const data=fixture(), start=new Date(2026,9,23,23).getTime(), end=new Date(2026,9,24,1).getTime();
+  const draft=C.newDraft(data.subjects[0].id); draft.running=true; draft.startedAt=start;
+  C.checkpoint(draft,new Date(2026,9,24,0,15).getTime());
+  const recovered=C.validateDraft(JSON.parse(JSON.stringify(draft)),data);
+  C.pause(recovered,end); C.closeBlock(recovered,end);
+  C.commitSession(data,recovered.id,recovered.blocks);
+  assert.equal(data.entries[0].date,'2026-10-23'); assert.equal(data.entries[0].duration,120*minute);
+  assert.equal(data.entries[0].startedAt,new Date(start).toISOString()); assert.equal(data.entries[0].endedAt,new Date(end).toISOString());
+  assert.equal(C.totals(data,'2026-10-24').total,0);
+});
+
+test('overnight pauses keep the first start date and subject changes establish a fresh start date', () => {
+  const data=fixture(), draft=C.newDraft(data.subjects[0].id);
+  draft.running=true; draft.startedAt=new Date(2026,9,23,23).getTime();
+  C.pause(draft,new Date(2026,9,23,23,30).getTime());
+  draft.running=true; draft.startedAt=new Date(2026,9,24,0,30).getTime();
+  C.closeBlock(draft,new Date(2026,9,24,1).getTime()); draft.activeSubjectId=data.subjects[1].id;
+  C.closeBlock(draft,new Date(2026,9,24,2).getTime());
+  assert.equal(draft.blocks[0].date,'2026-10-23'); assert.equal(draft.blocks[0].duration,60*minute);
+  assert.equal(draft.blocks[1].date,'2026-10-24'); assert.equal(draft.blocks[1].duration,60*minute);
+});
+
+test('older drafts without a reliable start retain the finish-date fallback', () => {
+  const data=fixture(), draft=C.newDraft(data.subjects[0].id), finish=new Date(2026,9,24,1).getTime();
+  draft.elapsed=120*minute; draft.blockElapsed=120*minute;
+  C.closeBlock(draft,finish);
+  assert.equal(draft.blocks[0].date,'2026-10-24'); assert.equal(draft.blocks[0].startedAt,undefined);
+});
+
 test('recovered older drafts do not invent a start time for pre-existing elapsed work', () => {
   const data = fixture(), draft = C.newDraft(data.subjects[0].id), start = Date.parse('2026-10-06T10:00:00.000Z');
   draft.elapsed = 10*minute; draft.blockElapsed = 10*minute;

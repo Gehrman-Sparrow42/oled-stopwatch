@@ -314,7 +314,7 @@
     checkpoint(draft,now);
     if (!draft.blockElapsed) return false;
     const keep = draft.blockElapsed >= MIN_BLOCK_MS;
-    if (keep) draft.blocks.push({ duration: draft.blockElapsed, subjectId: draft.activeSubjectId, date: dateKey(new Date(now)), legacyCredited: false,
+    if (keep) draft.blocks.push({ duration: draft.blockElapsed, subjectId: draft.activeSubjectId, date: dateKey(new Date(draft.blockStartedAt ?? now)), legacyCredited: false,
       ...(draft.blockStartedAt !== undefined ? {startedAt: new Date(draft.blockStartedAt).toISOString(), endedAt: new Date(draft.blockEndedAt).toISOString()} : {}) });
     else draft.elapsed -= draft.blockElapsed;
     delete draft.blockStartedAt; delete draft.blockEndedAt;
