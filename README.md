@@ -2,12 +2,24 @@
 
 A private study stopwatch and weekly notebook with a pitch-black OLED interface. Plain JavaScript, CSS, and a small Python static server. No accounts, telemetry, external fonts, or frontend dependencies.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    A[Timer and notebook UI] --> B[Session and diary logic]
+    B --> C[(Browser localStorage)]
+    B --> D[Backup and export]
+    E[Background worker or file-mode ticker] --> B
+    F[Optional loopback static server] --> A
+```
+
+The browser owns timer state and records. Timestamp-based elapsed time is independent of tick frequency; the worker refreshes the display in HTTP mode. [core.js](core.js) holds shared logic, [app.js](app.js) the interface and persistence, [worker.js](worker.js) the ticker, and [server.py](server.py) the optional static server.
 ## Start
 
-Use `C:\Tools\LAUNCHERS\Launch_OLED_Stopwatch.bat`, or run:
+Run from the repository root:
 
 ```powershell
-& C:\Tools\.venv\Scripts\python.exe server.py
+python server.py
 ```
 
 The server binds to `http://127.0.0.1:8110`. You can also open `index.html` directly. Browser storage belongs to its origin: direct-file mode, `localhost`, `127.0.0.1`, and different ports may have separate records. Use the same address consistently, or transfer a backup.
@@ -94,8 +106,8 @@ node --test core.test.js app.test.js
 node --check core.js
 node --check app.js
 node --check worker.js
-& C:\Tools\.venv\Scripts\python.exe -m py_compile server.py test_health.py
-& C:\Tools\.venv\Scripts\python.exe test_health.py
+python -m py_compile server.py test_health.py
+python test_health.py
 ```
 
 The health test runs the production static handler on an available loopback port, checks the HTML and all application assets, then closes its server.
