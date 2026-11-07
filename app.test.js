@@ -126,6 +126,45 @@ test('renaming the selected subject preserves saved progress and an active draft
   assert.equal(app.subjectName(app.draft.activeSubjectId),'Calculus'); assert.match(node('subjectError').textContent,/already exists/);
 });
 
+test('week labels describe past, current and future weeks across calendar boundaries', () => {
+  const data=fixture(), {app}=harness({[C.KEY]:JSON.stringify(data)}); app.load();
+  const cases = [
+    ['2026-11-07','monday','2026-11-02','This week'],
+    ['2026-11-07','monday','2026-10-26','Last week'],
+    ['2026-11-07','monday','2026-10-19','2 weeks ago'],
+    ['2026-11-07','monday','2026-11-09','Next week'],
+    ['2026-11-07','monday','2026-11-16','In 2 weeks'],
+    ['2026-11-08','monday','2026-11-02','This week'],
+    ['2026-11-08','sunday','2026-11-01','Last week'],
+    ['2026-11-08','sunday','2026-11-08','This week'],
+    ['2026-11-08','sunday','2026-11-15','Next week'],
+    ['2027-01-01','monday','2026-12-28','This week'],
+    ['2027-01-01','monday','2026-12-21','Last week'],
+    ['2027-01-01','monday','2027-01-04','Next week'],
+    ['2026-03-09','monday','2026-03-02','Last week'],
+    ['2026-03-02','monday','2026-03-16','In 2 weeks'],
+    ['2026-11-02','monday','2026-10-19','2 weeks ago']
+  ];
+  const before=JSON.stringify(app.data);
+  for (const [today,weekStart,viewed,expected] of cases) {
+    app.data.settings.weekStart=weekStart; app.week=new Date(viewed+'T12:00:00');
+    const viewedTime=app.week.getTime();
+    assert.equal(app.weekLabel(new Date(today+'T12:00:00')),expected);
+    assert.equal(app.week.getTime(),viewedTime);
+  }
+  app.data.settings.weekStart='monday'; assert.equal(JSON.stringify(app.data),before);
+});
+
+test('week labels change at the configured local week boundary', () => {
+  const data=fixture(), {app}=harness({[C.KEY]:JSON.stringify(data)}); app.load();
+  app.week=new Date('2026-11-02T00:00:00');
+  assert.equal(app.weekLabel(new Date('2026-11-08T23:59:59')),'This week');
+  assert.equal(app.weekLabel(new Date('2026-11-09T00:00:00')),'Last week');
+  app.data.settings.weekStart='sunday'; app.week=new Date('2026-11-01T00:00:00');
+  assert.equal(app.weekLabel(new Date('2026-11-07T23:59:59')),'This week');
+  assert.equal(app.weekLabel(new Date('2026-11-08T00:00:00')),'Last week');
+});
+
 test('an open notebook refreshes once when the local date advances', () => {
   const data=fixture(), {app}=harness({[C.KEY]:JSON.stringify(data)}); app.load();
   app.tab='diary'; app.diaryDate='2000-01-01'; let refreshes=0;

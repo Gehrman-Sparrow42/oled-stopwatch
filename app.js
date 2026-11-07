@@ -202,6 +202,16 @@
       select.value = selected; return select;
     }
     weekStart(date) { const day = new Date(date); day.setHours(0,0,0,0); day.setDate(day.getDate()-((day.getDay()+(this.settings.weekStart === 'monday' ? 6 : 0))%7)); return day; }
+    weekLabel(today = new Date()) {
+      const current = this.weekStart(today), viewed = this.weekStart(this.week);
+      // Compare calendar dates so daylight-saving changes cannot shift the week count.
+      const calendarDay = date => Date.UTC(date.getFullYear(),date.getMonth(),date.getDate());
+      const offset = Math.round((calendarDay(viewed)-calendarDay(current))/(7*86400000));
+      if (!offset) return 'This week';
+      if (offset === -1) return 'Last week';
+      if (offset === 1) return 'Next week';
+      return offset < 0 ? `${-offset} weeks ago` : `In ${offset} weeks`;
+    }
     displayDate(key) { const [,m,d] = key.split('-'); return this.settings.dateFormat === 'MM/DD' ? `${m}/${d}` : `${d}/${m}`; }
     renderAll() {
       document.documentElement.dataset.theme = this.settings.theme;
@@ -323,6 +333,9 @@
         actions.append(el('summary','Day actions'),tools); footer.append(actions); card.append(footer); days.append(card);
       }
       $('weekTitle').textContent = `${this.displayDate(C.dateKey(this.week))} – ${this.displayDate(lastKey)} · ${this.week.getFullYear()}`;
+      const weekLabel = this.weekLabel();
+      $('todayWeek').textContent = weekLabel;
+      $('todayWeek').setAttribute('aria-label',`${weekLabel}. Go to this week`);
       const average = summary.average;
       $('weekTotal').textContent = pretty(summary.total); $('weekAverage').textContent = average.average === null ? '—' : pretty(average.average);
       $('weekAverage').title = average.days ? `Average over ${average.days} ${average.days === 1 ? 'day' : 'days'}, through today` : 'This week has not started yet';
